@@ -24,6 +24,7 @@ plaidml_cc_library(
     name = "gpu",
     srcs = [
         "gpu_to_vulkan.cc",
+	"gpu_to_vulkan_dialect.cc",
         "kernel_outlining.cc",
         "pass_detail.h",
     ],
@@ -33,6 +34,7 @@ plaidml_cc_library(
     deps = [
         ":gen-pass",
         "//pmlc/util",
+	"//pmlc/dialect/vulkan/ir",
         "@llvm-project//mlir:GPUToSPIRVTransforms",
         "@llvm-project//mlir:GPUTransforms",
     ],
