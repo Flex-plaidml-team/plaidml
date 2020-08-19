@@ -39,6 +39,7 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
   pm.addPass(pmlc::dialect::pxa::createTileAccumulatePass());
+  pm.addPass(pmlc::dialect::pxa::createNestLoopsPass());
 
   // TODO: do optimizations here
 
