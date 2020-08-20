@@ -104,6 +104,7 @@ def plaidml_workspace():
             clean_dep("//vendor/mlir:mlir.BUILD"): "mlir/BUILD.bazel",
             clean_dep("//vendor/mlir:test.BUILD"): "mlir/test/BUILD.bazel",
         },
+        patches = [clean_dep("//vendor/mlir:mlir-patch.diff")],
         override = "PLAIDML_LLVM_REPO",
     )
 
