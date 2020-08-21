@@ -93,7 +93,7 @@ def plaidml_workspace():
 
     LLVM_COMMIT = "7e56550ed070913036d0681aae66833312fabdd0"
     LLVM_SHA256 = "41a7e62f985a33d09097c101cd9a469ae82412b3db27437b7b849b5bace1243c"
-    LLVM_URL = "https://github.com/plaidml/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)
+    LLVM_URL = "https://github.com/Flex-plaidml-team/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)
     http_archive(
         name = "llvm-project",
         url = LLVM_URL,
