@@ -85,4 +85,9 @@ def VectorizeExample : FunctionPass<"pxa-vectorize-example"> {
   let dependentDialects = ["mlir::vector::VectorDialect"];
 }
 
+def TruncateTypeTransformation : FunctionPass<"pmlc-truncate-type-transformation"> {
+let summary = "Convert std::trunci non-8/16/32/64-bit result to i32";
+let constructor = "pmlc::dialect::pxa::createTruncateTypeTransformationnPass()";
+}
+
 #endif // __PMLC_DIALECT_PXA_PASSES__

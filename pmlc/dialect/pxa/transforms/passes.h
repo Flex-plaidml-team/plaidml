@@ -51,6 +51,8 @@ std::unique_ptr<mlir::Pass> createTileAccumulatePass();
 
 std::unique_ptr<mlir::Pass> createVectorizeExamplePass();
 
+std::unique_ptr<mlir::Pass> createTruncateTypeTransformationPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "pmlc/dialect/pxa/transforms/passes.h.inc"
