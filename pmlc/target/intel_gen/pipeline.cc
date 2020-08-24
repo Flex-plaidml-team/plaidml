@@ -35,6 +35,11 @@ namespace {
 // Lower stdx and std dialect to llvm dialect
 struct LowerStdxAndStdToLLVMPass
     : public PassWrapper<LowerStdxAndStdToLLVMPass, OperationPass<ModuleOp>> {
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<LLVM::LLVMDialect>();
+  }
+
   void runOnOperation() override {
     auto module = getOperation();
     auto *context = module.getContext();
@@ -59,11 +64,9 @@ struct LowerStdxAndStdToLLVMPass
   }
 };
 
-/*
 std::unique_ptr<Pass> createLowerStdxAndStdToLLVMPass() {
   return std::make_unique<LowerStdxAndStdToLLVMPass>();
 }
-*/
 
 void pipelineBuilder(OpPassManager &pm) {
   pm.getContext()->getOrLoadDialect<spirv::SPIRVDialect>();
@@ -102,14 +105,7 @@ void pipelineBuilder(OpPassManager &pm) {
   // GPU to Vulkan.
   pm.addPass(conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
   // pm.addPass(conversion::gpu::createLLVMLoweringPass());
-  // pm.addPass(createLowerStdxAndStdToLLVMPass());
-
-  pm.addPass(createLowerToLLVMPass(LowerToLLVMOptions{
-      /*useBarePtrCallConv=*/false,
-      /*emitCWrappers=*/true,
-      /*indexBitwidth=*/kDeriveIndexBitwidthFromDataLayout,
-      /*useAlignedAlloc=*/false,
-  }));
+  pm.addPass(createLowerStdxAndStdToLLVMPass());
 }
 
 } // namespace
