@@ -59,9 +59,11 @@ struct LowerStdxAndStdToLLVMPass
   }
 };
 
+/*
 std::unique_ptr<Pass> createLowerStdxAndStdToLLVMPass() {
   return std::make_unique<LowerStdxAndStdToLLVMPass>();
 }
+*/
 
 void pipelineBuilder(OpPassManager &pm) {
   pm.getContext()->getOrLoadDialect<spirv::SPIRVDialect>();
@@ -100,7 +102,14 @@ void pipelineBuilder(OpPassManager &pm) {
   // GPU to Vulkan.
   pm.addPass(conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
   // pm.addPass(conversion::gpu::createLLVMLoweringPass());
-  pm.addPass(createLowerStdxAndStdToLLVMPass());
+  // pm.addPass(createLowerStdxAndStdToLLVMPass());
+
+  pm.addPass(createLowerToLLVMPass(LowerToLLVMOptions{
+      /*useBarePtrCallConv=*/false,
+      /*emitCWrappers=*/true,
+      /*indexBitwidth=*/kDeriveIndexBitwidthFromDataLayout,
+      /*useAlignedAlloc=*/false,
+  }));
 }
 
 } // namespace
