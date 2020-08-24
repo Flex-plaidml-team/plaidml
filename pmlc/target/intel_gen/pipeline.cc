@@ -10,6 +10,7 @@
 #include "mlir/Dialect/GPU/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SPIRV/Passes.h"
+#include "mlir/Dialect/SPIRV/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/SPIRVOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -63,6 +64,8 @@ std::unique_ptr<Pass> createLowerStdxAndStdToLLVMPass() {
 }
 
 void pipelineBuilder(OpPassManager &pm) {
+  pm.getContext()->getOrLoadDialect<spirv::SPIRVDialect>();
+
   pm.addPass(dialect::tile::createComputeBoundsPass());
   // pm.addPass(dialect::tile::createPadPass());
   pm.addPass(createCanonicalizerPass());
@@ -74,11 +77,6 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(pmlc::dialect::pxa::createTileAccumulatePass());
   pm.addPass(pmlc::dialect::pxa::createNestLoopsPass());
 
-  // TODO: do optimizations here
-
-  // pm.addPass(std::make_unique<UpdateWorkGroupSizePass>(workGroupSize));
-  // pm.addPass(std::make_unique<IREETileLinalgPass>());
-  // pm.addPass(createConvertLinalgToLoopsPass());
   pm.addPass(conversion::pxa_to_affine::createLowerPXAToAffinePass());
   pm.addPass(createLowerAffinePass());
   pm.addPass(createCanonicalizerPass());
@@ -94,13 +92,10 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
   pm.addPass(createConvertGPUToSPIRVPass());
-  // pm.addPass(std::make_unique<IREEGPUToSPIRVPass>());
 
   // SPIR-V passes for lowering attributes.
   pm.addPass(spirv::createLowerABIAttributesPass());
   pm.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
-  pm.addPass(createCanonicalizerPass());
-  pm.addPass(createCSEPass());
 
   // GPU to Vulkan.
   pm.addPass(conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
