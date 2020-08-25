@@ -20,7 +20,6 @@ LogicalResult truncITypeTransformation(TruncateIOp op) {
 
   auto originDstType = getElementTypeOrSelf(op.getType());
   auto originTypeWidth = originDstType.cast<IntegerType>().getWidth();
-  IVLOG(1, "!!!!! TruncateIOp result width is " << originTypeWidth);
   if (!originTypeWidth || originTypeWidth % 8 == 0) {
     return failure();
   }
@@ -58,7 +57,6 @@ struct TruncateTypeTransformationPass
     : public TruncateTypeTransformationBase<TruncateTypeTransformationPass> {
   void runOnFunction() final {
     auto funcOp = getFunction();
-    IVLOG(1, "!! Coming into TruncateTypeTransformationPass");
     funcOp.walk(
         [&](TruncateIOp trunciOp) { truncITypeTransformation(trunciOp); });
   }
