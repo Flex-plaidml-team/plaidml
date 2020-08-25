@@ -39,7 +39,6 @@ plaidml_cc_library(
         "test_analysis.cc",
         "tile.cc",
         "tile_accumulate.cc",
-        "trunci_transform.cc",
         "vectorize.cc",
     ],
     hdrs = [
@@ -49,7 +48,6 @@ plaidml_cc_library(
         "stencil.h",
         "tile.h",
         "tile_accumulate.h",
-        "trunci_transform.h",
         "vectorize.h",
     ],
     deps = [

@@ -4,6 +4,7 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
 #include "pmlc/dialect/stdx/transforms/pass_detail.h"
 
@@ -31,6 +32,15 @@ public:
   using OpRewritePattern<StoreOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(StoreOp storeOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Changes TruncateIOp to i1 to CmpIOp which is followed by selectOp or just
+/// keep its origin type as SConvert cannot take non-i8/16/32/64 int type
+class TruncateIOpI1ToCmpIOp final : public OpRewritePattern<TruncateIOp> {
+public:
+  using OpRewritePattern<TruncateIOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(TruncateIOp trunciOp,
                                 PatternRewriter &rewriter) const override;
 };
 } // namespace
@@ -101,10 +111,45 @@ LogicalResult StoreOpI1ToI32::matchAndRewrite(StoreOp storeOp,
   return success();
 }
 
+LogicalResult
+TruncateIOpI1ToCmpIOp::matchAndRewrite(TruncateIOp trunciOp,
+                                       PatternRewriter &rewriter) const {
+  auto originDstType = getElementTypeOrSelf(trunciOp.getType());
+  auto originTypeWidth = originDstType.cast<IntegerType>().getWidth();
+  if (!originTypeWidth || originTypeWidth % 8 == 0) {
+    return failure();
+  }
+
+  bool isFollowedBySelect = false;
+  auto dstResult = trunciOp.getResult();
+  for (auto userOp : dstResult.getUsers()) {
+    if (dyn_cast<SelectOp>(userOp)) {
+      isFollowedBySelect = true;
+      break;
+    }
+  }
+  auto loc = trunciOp.getLoc();
+  auto srcOperand = trunciOp.getOperand();
+
+  if (isFollowedBySelect) {
+    auto srcType = srcOperand.getType();
+    auto cstOp0 = rewriter.create<ConstantIntOp>(loc, 0, srcType);
+    auto cmpiOp = rewriter.create<CmpIOp>(loc, CmpIPredicate::ne, srcOperand,
+                                          cstOp0.getResult());
+    dstResult.replaceAllUsesWith(cmpiOp.getResult());
+  } else {
+    dstResult.replaceAllUsesWith(srcOperand);
+  }
+  trunciOp.erase();
+
+  return success();
+}
+
 /// Hook for adding patterns.
 void populateI1StorageToI32(MLIRContext *context,
                             OwningRewritePatternList &patterns) {
-  patterns.insert<LoadOpI1ToI32, StoreOpI1ToI32>(context);
+  patterns.insert<LoadOpI1ToI32, StoreOpI1ToI32, TruncateIOpI1ToCmpIOp>(
+      context);
 }
 
 // Adaptor for building loop nests for the specific memRef shape
