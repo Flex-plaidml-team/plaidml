@@ -150,7 +150,6 @@ public:
   }
 
   void vectorizeReduceOp(PxaReduceOp op) {
-    Value mem = op.mem();
     Value val = op.val();
     OpBuilder builder(op);
     if (!val.getType().isa<VectorType>()) {
@@ -160,8 +159,8 @@ public:
       val = bcast.getResult();
     }
     auto vecOp = builder.create<PxaVectorReduceOp>(
-        op.getLoc(), ArrayRef<Type>{mem.getType()}, op.agg(), val, mem,
-        op.map(), op.idxs());
+        op.getLoc(), ArrayRef<Type>{op.getMemRefType()}, op.agg(), val,
+        op.memref(), op.map(), op.idxs());
     op.replaceAllUsesWith(vecOp.getResult());
     op.erase();
   }
@@ -197,7 +196,8 @@ public:
       return failure();
     }
 
-    auto step = loop.steps().getValue()[argNum].cast<IntegerAttr>().getInt();
+    auto steps = loop.getSteps();
+    auto step = steps[argNum];
     if (step != 1) {
       IVLOG(3,
             "Vectorize: Failed, the steps for the dimension being vectorized "
@@ -222,12 +222,6 @@ public:
     // Preflight complete, do the transform
     for (auto &op : llvm::make_early_inc_range(body->getOperations())) {
       vectorizeOperation(&op);
-    }
-    // TODO: We should upstream a utility like getSteps since this code is
-    // duplicated in multiple places
-    llvm::SmallVector<int64_t, 6> steps;
-    for (auto stepAttr : loop.steps().cast<ArrayAttr>().getValue()) {
-      steps.push_back(stepAttr.cast<IntegerAttr>().getInt());
     }
     steps[argNum] *= vectorSize;
     loop.setSteps(steps);

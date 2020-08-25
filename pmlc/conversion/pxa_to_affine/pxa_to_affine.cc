@@ -34,8 +34,9 @@ struct AffineParallelOpConversion
       return failure();
     // Create an affine loop nest, capture induction variables
     llvm::SmallVector<Value, 8> ivs;
+    auto steps = op.getSteps();
     for (unsigned int i = 0; i < op.lowerBoundsMap().getNumResults(); i++) {
-      auto step = op.steps().getValue()[i].cast<IntegerAttr>().getInt();
+      auto step = steps[i];
       auto forOp = rewriter.create<AffineForOp>(
           op.getLoc(), op.getLowerBoundsOperands(),
           op.lowerBoundsMap().getSubMap({i}), op.getUpperBoundsOperands(),
@@ -169,13 +170,13 @@ struct PxaReduceOpConversion : public OpConversionPattern<pxa::PxaReduceOp> {
   LogicalResult
   matchAndRewrite(pxa::PxaReduceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    auto source = rewriter.create<AffineLoadOp>(op.getLoc(), op.mem(), op.map(),
-                                                op.idxs());
+    auto source = rewriter.create<AffineLoadOp>(op.getLoc(), op.memref(),
+                                                op.map(), op.idxs());
     auto reduce =
         createReduction(rewriter, op.getLoc(), op.agg(), source, op.val());
-    rewriter.create<AffineStoreOp>(op.getLoc(), reduce, op.mem(), op.map(),
+    rewriter.create<AffineStoreOp>(op.getLoc(), reduce, op.memref(), op.map(),
                                    op.idxs());
-    op.replaceAllUsesWith(op.mem());
+    op.replaceAllUsesWith(op.memref());
     rewriter.eraseOp(op);
     return success();
   }
@@ -189,13 +190,13 @@ struct PxaVectorReduceOpConversion
   matchAndRewrite(pxa::PxaVectorReduceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
     auto source = rewriter.create<AffineVectorLoadOp>(
-        op.getLoc(), op.getVectorType(), op.mem(), op.getAffineMap(),
+        op.getLoc(), op.getVectorType(), op.memref(), op.getAffineMap(),
         op.idxs());
     auto reduce =
         createReduction(rewriter, op.getLoc(), op.agg(), source, op.vector());
-    rewriter.create<AffineVectorStoreOp>(op.getLoc(), reduce, op.mem(),
+    rewriter.create<AffineVectorStoreOp>(op.getLoc(), reduce, op.memref(),
                                          op.getAffineMap(), op.idxs());
-    op.replaceAllUsesWith(op.mem());
+    op.replaceAllUsesWith(op.memref());
     rewriter.eraseOp(op);
     return success();
   }
