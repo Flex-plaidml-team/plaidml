@@ -1,7 +1,7 @@
 // Copyright 2020, Intel Corporation
 
-#include "mlir/Conversion/GPUToSPIRV/ConvertGPUToSPIRVPass.h"
 #include "mlir/Conversion/GPUToVulkan/ConvertGPUToVulkanPass.h"
+#include "mlir/Conversion/SCFToGPU/SCFToGPU.h"
 #include "mlir/Conversion/SCFToGPU/SCFToGPUPass.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
@@ -12,34 +12,33 @@
 #include "mlir/Dialect/SPIRV/Passes.h"
 #include "mlir/Dialect/SPIRV/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/SPIRVOps.h"
+#include "mlir/Dialect/StandardOps/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
 #include "pmlc/compiler/registry.h"
 
-#include "pmlc/conversion/SCFToGPU/SCFToGPUPass.h"
 #include "pmlc/conversion/gpu/lowering.h"
+#include "pmlc/conversion/gpu_to_spirv/passes.h"
 #include "pmlc/conversion/pxa_to_affine/passes.h"
 #include "pmlc/conversion/stdx_to_llvm/passes.h"
 #include "pmlc/conversion/tile_to_pxa/passes.h"
-#include "pmlc/dialect/pxa//transforms/passes.h"
+#include "pmlc/dialect/pxa/transforms/passes.h"
+#include "pmlc/dialect/stdx/ir/ops.h"
 #include "pmlc/dialect/stdx/transforms/passes.h"
 #include "pmlc/dialect/tile/transforms/passes.h"
+#include "pmlc/target/intel_gen/pass_detail.h"
+#include "pmlc/target/intel_gen/passes.h"
 
 using namespace mlir; // NOLINT[build/namespaces]
 
 namespace pmlc::target::intel_gen {
 
 namespace {
-// Lower stdx and std dialect to llvm dialect
-struct LowerStdxAndStdToLLVMPass
-    : public PassWrapper<LowerStdxAndStdToLLVMPass, OperationPass<ModuleOp>> {
 
-  void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<LLVM::LLVMDialect>();
-  }
-
+struct ConvertStandardToLLVMPass
+    : public ConvertStandardToLLVMBase<ConvertStandardToLLVMPass> {
   void runOnOperation() override {
     auto module = getOperation();
     auto *context = module.getContext();
@@ -53,6 +52,7 @@ struct LowerStdxAndStdToLLVMPass
     LLVMTypeConverter typeConverter(context, options);
 
     OwningRewritePatternList patterns;
+    populateExpandTanhPattern(patterns, context);
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     conversion::stdx_to_llvm::populateStdXToLLVMConversionPatterns(
         typeConverter, patterns);
@@ -64,39 +64,86 @@ struct LowerStdxAndStdToLLVMPass
   }
 };
 
-std::unique_ptr<Pass> createLowerStdxAndStdToLLVMPass() {
-  return std::make_unique<LowerStdxAndStdToLLVMPass>();
+struct ParallelLoopToGpuPass
+    : public ConvertParallelLoopToGpuBase<ParallelLoopToGpuPass> {
+  void runOnOperation() override {
+    OwningRewritePatternList patterns;
+    populateParallelLoopToGPUPatterns(patterns, &getContext());
+    ConversionTarget target(getContext());
+    target.addLegalDialect<StandardOpsDialect>();
+    target.addLegalDialect<pmlc::dialect::stdx::StdXDialect>();
+    target.addLegalDialect<AffineDialect>();
+    target.addLegalDialect<gpu::GPUDialect>();
+    target.addLegalDialect<scf::SCFDialect>();
+    target.addIllegalOp<scf::ParallelOp>();
+    if (failed(applyPartialConversion(getOperation(), target, patterns)))
+      signalPassFailure();
+  }
+};
+
+} // namespace
+
+std::unique_ptr<Pass> createConvertStandardToLLVM() {
+  return std::make_unique<ConvertStandardToLLVMPass>();
+}
+
+std::unique_ptr<Pass> createParallelLoopToGpuPass() {
+  return std::make_unique<ParallelLoopToGpuPass>();
 }
 
 void pipelineBuilder(OpPassManager &pm) {
   pm.getContext()->getOrLoadDialect<spirv::SPIRVDialect>();
 
+  // Bound + pad initial tile code
   pm.addPass(dialect::tile::createComputeBoundsPass());
-  // pm.addPass(dialect::tile::createPadPass());
+  pm.addPass(dialect::tile::createPadPass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
+  // Lower to PXA
   pm.addPass(conversion::tile_to_pxa::createLowerTileToPXAPass());
+  pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
+
+  // Move accumulation indexes into an inner loop
   pm.addPass(pmlc::dialect::pxa::createTileAccumulatePass());
   pm.addPass(pmlc::dialect::pxa::createNestLoopsPass());
-
-  pm.addPass(conversion::pxa_to_affine::createLowerPXAToAffinePass());
-  pm.addPass(createLowerAffinePass());
+  pm.addPass(
+      pmlc::dialect::pxa::createAffineNormalizePass(/*normalize=*/false));
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
-  pm.addPass(dialect::stdx::createI1StorageToI32Pass());
-  pm.addPass(pmlc::conversion::scf_to_gpu::createSimpleSCFToGPUPass());
+  // Assign GPU blocks + threads to outermost loop
+  pm.addPass(pmlc::dialect::pxa::createGPUThreadPass(/*maxThreads=*/128));
+  pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass());
   pm.addPass(createCanonicalizerPass());
+  pm.addPass(createCSEPass());
+
+  // Lower out of PXA memory semantics
+  pm.addPass(conversion::pxa_to_affine::createLowerPXAToAffinePass());
+
+  // Do a custom version of lower-affine which also set GPU mappings
+  pm.addPass(createIntelGenLowerAffinePass());
+  pm.addPass(createCanonicalizerPass());
+  pm.addPass(createCSEPass());
+
+  // Fix booleans
+  pm.addPass(dialect::stdx::createI1StorageToI32Pass());
+
+  // Lower mapped scf.parallel's to GPU
+  pm.addPass(createParallelLoopToGpuPass());
+  pm.addPass(createCanonicalizerPass());
+  pm.addPass(createCSEPass());
+
+  // Do kernel outlining
   pm.addPass(conversion::gpu::createGpuKernelOutliningPass());
 
   // GPU to SPIR-V.
   pm.addPass(createLegalizeStdOpsForSPIRVLoweringPass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
-  pm.addPass(createConvertGPUToSPIRVPass());
+  pm.addPass(conversion::gpu_to_spirv::createGPUToSPIRVCustomPass());
 
   // SPIR-V passes for lowering attributes.
   pm.addPass(spirv::createLowerABIAttributesPass());
@@ -104,15 +151,15 @@ void pipelineBuilder(OpPassManager &pm) {
 
   // GPU to Vulkan.
   pm.addPass(conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
-  // pm.addPass(conversion::gpu::createLLVMLoweringPass());
-  pm.addPass(createLowerStdxAndStdToLLVMPass());
-}
 
-} // namespace
+  // Convert Vulkan calls to LLVM code
+  pm.addPass(createConvertStandardToLLVM());
+}
 
 static PassPipelineRegistration<>
     passPipelineReg("target-intel_gen", "Target pipeline for Intel GEN iGPUs",
                     pipelineBuilder);
+
 static compiler::TargetRegistration targetReg("intel_gen", pipelineBuilder);
 
 } // namespace pmlc::target::intel_gen
