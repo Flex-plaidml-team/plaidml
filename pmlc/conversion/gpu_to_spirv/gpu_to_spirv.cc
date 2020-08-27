@@ -38,6 +38,36 @@ struct StdxSubgroupBroadcastOpConversion
   }
 };
 
+struct StdxRoundOpConversion : public SPIRVOpLowering<stdx::RoundOp> {
+  using SPIRVOpLowering<stdx::RoundOp>::SPIRVOpLowering;
+
+  LogicalResult
+  matchAndRewrite(stdx::RoundOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    assert(operands.size() == 1);
+    auto module = op.getParentOfType<spirv::ModuleOp>();
+    if (!module)
+      return failure();
+    spirv::TargetEnvAttr targetEnv = spirv::lookupTargetEnvOrDefault(module);
+    if (spirv::getMemoryModel(targetEnv) != spirv::MemoryModel::GLSL450)
+      return failure();
+    auto stdxType = op.getResult().getType();
+    auto loc = op.getLoc();
+    /*
+     * There is no round operation in SPIRV dialect so
+     * std.round(x) is replaced by floor(x + 0.5).
+     */
+    auto cstOp = rewriter.create<spirv::ConstantOp>(
+        loc, stdxType, FloatAttr::get(stdxType, 0.5));
+    auto addOp = rewriter.create<spirv::FAddOp>(loc, cstOp.getResult(),
+                                                operands.front());
+    rewriter.replaceOpWithNewOp<spirv::GLSLFloorOp>(op, stdxType,
+                                                    addOp.getResult());
+
+    return success();
+  }
+};
+
 struct GPUToSPIRVCustomPass
     : public GPUToSPIRVCustomBase<GPUToSPIRVCustomPass> {
   void runOnOperation() final {
@@ -75,7 +105,8 @@ struct GPUToSPIRVCustomPass
 void populateStdxToSPIRVPatterns(MLIRContext *context,
                                  SPIRVTypeConverter &typeConverter,
                                  OwningRewritePatternList &patterns) {
-  patterns.insert<StdxSubgroupBroadcastOpConversion>(context, typeConverter);
+  patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion>(
+      context, typeConverter);
 }
 
 std::unique_ptr<Pass> createGPUToSPIRVCustomPass() {

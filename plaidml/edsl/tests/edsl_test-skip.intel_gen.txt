@@ -13,7 +13,6 @@ CppEdsl.HigherPrecisionConstants
 CppEdsl.MnistCnn
 CppEdsl.Prng
 CppEdsl.Pow
-CppEdsl.Round
 CppEdsl.SinH
 CppEdsl.Tan
 CppEdsl.Winograd
