@@ -38,6 +38,20 @@ struct StdxSubgroupBroadcastOpConversion
   }
 };
 
+template <typename StdxOpTy, typename SpirvOpTy>
+struct StdxUnaryOpConversion : public SPIRVOpLowering<StdxOpTy> {
+  using SPIRVOpLowering<StdxOpTy>::SPIRVOpLowering;
+
+  LogicalResult
+  matchAndRewrite(StdxOpTy op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    assert(operands.size() == 1);
+    auto dstType = op.getResult().getType();
+    rewriter.replaceOpWithNewOp<SpirvOpTy>(op, dstType, operands.front());
+    return success();
+  }
+};
+
 struct StdxRoundOpConversion : public SPIRVOpLowering<stdx::RoundOp> {
   using SPIRVOpLowering<stdx::RoundOp>::SPIRVOpLowering;
 
@@ -64,34 +78,6 @@ struct StdxRoundOpConversion : public SPIRVOpLowering<stdx::RoundOp> {
     rewriter.replaceOpWithNewOp<spirv::GLSLFloorOp>(op, stdxType,
                                                     addOp.getResult());
 
-    return success();
-  }
-};
-
-struct StdxFloorOpConversion : public SPIRVOpLowering<stdx::FloorOp> {
-  using SPIRVOpLowering<stdx::FloorOp>::SPIRVOpLowering;
-
-  LogicalResult
-  matchAndRewrite(stdx::FloorOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    assert(operands.size() == 1);
-    auto dstType = op.getResult().getType();
-    rewriter.replaceOpWithNewOp<spirv::GLSLFloorOp>(op, dstType,
-                                                    operands.front());
-    return success();
-  }
-};
-
-struct StdxTanOpConversion : public SPIRVOpLowering<stdx::TanOp> {
-  using SPIRVOpLowering<stdx::TanOp>::SPIRVOpLowering;
-
-  LogicalResult
-  matchAndRewrite(stdx::TanOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    assert(operands.size() == 1);
-    auto dstType = op.getResult().getType();
-    rewriter.replaceOpWithNewOp<spirv::GLSLTanOp>(op, dstType,
-                                                  operands.front());
     return success();
   }
 };
@@ -134,8 +120,9 @@ void populateStdxToSPIRVPatterns(MLIRContext *context,
                                  SPIRVTypeConverter &typeConverter,
                                  OwningRewritePatternList &patterns) {
   patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion,
-                  StdxFloorOpConversion, StdxTanOpConversion>(context,
-                                                              typeConverter);
+                  StdxUnaryOpConversion<stdx::FloorOp, spirv::GLSLFloorOp>,
+                  StdxUnaryOpConversion<stdx::TanOp, spirv::GLSLTanOp>>(
+      context, typeConverter);
 }
 
 std::unique_ptr<Pass> createGPUToSPIRVCustomPass() {
