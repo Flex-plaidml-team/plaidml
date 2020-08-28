@@ -13,7 +13,6 @@ CppEdsl.MnistCnn
 CppEdsl.Prng
 CppEdsl.Pow
 CppEdsl.SinH
-CppEdsl.Tan
 CppEdsl.Winograd
 
 
