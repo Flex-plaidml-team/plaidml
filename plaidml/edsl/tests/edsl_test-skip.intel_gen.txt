@@ -5,7 +5,6 @@ CppEdsl.BitNot
 CppEdsl.BitRightScalar
 CppEdsl.ComplexConv2d
 CppEdsl.ConvI8
-CppEdsl.CosH
 CppEdsl.Erf
 CppEdsl.HigherPrecisionInvalidNegative
 CppEdsl.HigherPrecisionConstants
