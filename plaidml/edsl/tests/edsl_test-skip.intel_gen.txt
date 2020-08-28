@@ -7,7 +7,6 @@ CppEdsl.ComplexConv2d
 CppEdsl.ConvI8
 CppEdsl.CosH
 CppEdsl.Erf
-CppEdsl.Floor
 CppEdsl.HigherPrecisionInvalidNegative
 CppEdsl.HigherPrecisionConstants
 CppEdsl.MnistCnn

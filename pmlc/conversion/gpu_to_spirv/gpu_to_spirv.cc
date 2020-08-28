@@ -68,6 +68,20 @@ struct StdxRoundOpConversion : public SPIRVOpLowering<stdx::RoundOp> {
   }
 };
 
+struct StdxFloorOpConversion : public SPIRVOpLowering<stdx::FloorOp> {
+  using SPIRVOpLowering<stdx::FloorOp>::SPIRVOpLowering;
+
+  LogicalResult
+  matchAndRewrite(stdx::FloorOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    assert(operands.size() == 1);
+    auto dstType = op.getResult().getType();
+    rewriter.replaceOpWithNewOp<spirv::GLSLFloorOp>(op, dstType,
+                                                    operands.front());
+    return success();
+  }
+};
+
 struct GPUToSPIRVCustomPass
     : public GPUToSPIRVCustomBase<GPUToSPIRVCustomPass> {
   void runOnOperation() final {
@@ -105,8 +119,8 @@ struct GPUToSPIRVCustomPass
 void populateStdxToSPIRVPatterns(MLIRContext *context,
                                  SPIRVTypeConverter &typeConverter,
                                  OwningRewritePatternList &patterns) {
-  patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion>(
-      context, typeConverter);
+  patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion,
+                  StdxFloorOpConversion>(context, typeConverter);
 }
 
 std::unique_ptr<Pass> createGPUToSPIRVCustomPass() {
