@@ -107,6 +107,31 @@ struct StdxCosHOpConversion : public SPIRVOpLowering<stdx::CosHOp> {
   }
 };
 
+struct StdxSinHOpConversion : public SPIRVOpLowering<stdx::SinHOp> {
+  using SPIRVOpLowering<stdx::SinHOp>::SPIRVOpLowering;
+  LogicalResult
+  matchAndRewrite(stdx::SinHOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    assert(operands.size() == 1);
+    auto loc = op.getLoc();
+    auto operand = operands.front();
+    auto srcType = operand.getType();
+    auto posExp =
+        rewriter.create<spirv::GLSLExpOp>(loc, srcType, operand);
+    auto negOperand = rewriter.create<spirv::FNegateOp>(loc, operand);
+    auto negExp =
+        rewriter.create<spirv::GLSLExpOp>(loc, srcType, negOperand);
+    auto expSum =
+        rewriter.create<spirv::FSubOp>(loc, posExp, negExp);
+    auto cst2 = rewriter.create<spirv::ConstantOp>(
+        loc, srcType, FloatAttr::get(srcType, 2.0));
+    auto divOp = rewriter.create<spirv::FDivOp>(loc, expSum, cst2);
+    op.getResult().replaceAllUsesWith(divOp.getResult());
+    op.erase();
+    return success();
+  }
+};
+
 struct GPUToSPIRVCustomPass
     : public GPUToSPIRVCustomBase<GPUToSPIRVCustomPass> {
   void runOnOperation() final {
@@ -147,7 +172,7 @@ void populateStdxToSPIRVPatterns(MLIRContext *context,
   patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion,
                   StdxUnaryOpConversion<stdx::FloorOp, spirv::GLSLFloorOp>,
                   StdxUnaryOpConversion<stdx::TanOp, spirv::GLSLTanOp>,
-                  StdxCosHOpConversion>(context, typeConverter);
+                  StdxCosHOpConversion, StdxSinHOpConversion>(context, typeConverter);
 }
 
 std::unique_ptr<Pass> createGPUToSPIRVCustomPass() {

@@ -11,7 +11,6 @@ CppEdsl.HigherPrecisionConstants
 CppEdsl.MnistCnn
 CppEdsl.Prng
 CppEdsl.Pow
-CppEdsl.SinH
 CppEdsl.Winograd
 
 
