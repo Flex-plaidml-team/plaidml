@@ -42,7 +42,8 @@ AffineParallelOp tileAccumulations(AffineParallelOp op, bool skipTrivial) {
   bool anyNonAccum = false;
   for (size_t i = 0; i < ranges.size(); i++) {
     auto arg = op.getIVs()[i];
-    if (si.strides.count(arg)) {
+    bool stridesEmpty = !si.strides.size() && !anyNonAccum;
+    if (si.strides.count(arg) || stridesEmpty) {
       // Output non-stationary, outer loop
       anyNonAccum = true;
       accumTile.push_back(steps[i]);
