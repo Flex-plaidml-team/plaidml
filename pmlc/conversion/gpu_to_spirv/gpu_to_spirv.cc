@@ -59,12 +59,6 @@ struct StdxRoundOpConversion : public SPIRVOpLowering<stdx::RoundOp> {
   matchAndRewrite(stdx::RoundOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
     assert(operands.size() == 1);
-    auto module = op.getParentOfType<spirv::ModuleOp>();
-    if (!module)
-      return failure();
-    spirv::TargetEnvAttr targetEnv = spirv::lookupTargetEnvOrDefault(module);
-    if (spirv::getMemoryModel(targetEnv) != spirv::MemoryModel::GLSL450)
-      return failure();
     auto stdxType = op.getResult().getType();
     auto loc = op.getLoc();
     /*
@@ -159,6 +153,8 @@ struct GPUToSPIRVCustomPass
     populateSCFToSPIRVPatterns(context, typeConverter, scfContext, patterns);
     populateStandardToSPIRVPatterns(context, typeConverter, patterns);
     populateStdxToSPIRVPatterns(context, typeConverter, patterns);
+    if (spirv::getMemoryModel(targetAttr) == spirv::MemoryModel::GLSL450)
+      populateStdxToSPIRVGLSLPatterns(context, typeConverter, patterns);
 
     if (failed(applyFullConversion(kernelModules, *target, patterns)))
       return signalPassFailure();
@@ -169,10 +165,17 @@ struct GPUToSPIRVCustomPass
 void populateStdxToSPIRVPatterns(MLIRContext *context,
                                  SPIRVTypeConverter &typeConverter,
                                  OwningRewritePatternList &patterns) {
-  patterns.insert<StdxSubgroupBroadcastOpConversion, StdxRoundOpConversion,
+  patterns.insert<StdxSubgroupBroadcastOpConversion>(context, typeConverter);
+}
+
+void populateStdxToSPIRVGLSLPatterns(MLIRContext *context,
+                                     SPIRVTypeConverter &typeConverter,
+                                     OwningRewritePatternList &patterns) {
+  patterns.insert<StdxRoundOpConversion,
                   StdxUnaryOpConversion<stdx::FloorOp, spirv::GLSLFloorOp>,
                   StdxUnaryOpConversion<stdx::TanOp, spirv::GLSLTanOp>,
-                  StdxCosHOpConversion, StdxSinHOpConversion>(context, typeConverter);
+                  StdxCosHOpConversion, StdxSinHOpConversion>(context,
+                                                              typeConverter);
 }
 
 std::unique_ptr<Pass> createGPUToSPIRVCustomPass() {
