@@ -60,3 +60,37 @@ func @mixed() {
   }
   return
 }
+
+// CHECK-LABEL: func @max
+#map0 = affine_map<(d0) -> (d0)>
+#map1 = affine_map<() -> (0)>
+#map2 = affine_map<() -> (3)>
+#map3 = affine_map<(d0, d1) -> (d0, d1)>
+#map4 = affine_map<(d0, d1) -> (d0 + 1, d1 + 3)>
+#map5 = affine_map<() -> (0, 0)>
+#map6 = affine_map<() -> (3, 3)>
+
+func @max(%arg0: memref<3x3xf32>) -> memref<3xf32> {
+  // CHECK: constant
+  // CHECK-NEXT: alloc()
+  %cst = constant 0xFF800000 : f32
+  %0 = alloc() : memref<3xf32>
+  // CHECK: affine.parallel
+  %1 = affine.parallel (%arg1) = (0) to (3) reduce ("assign") -> (memref<3xf32>) {
+    %3 = pxa.reduce assign %cst, %0[%arg1] : memref<3xf32>
+    affine.yield %3 : memref<3xf32>
+  }
+  // CHECK: affine.parallel
+  %2 = affine.parallel (%arg1, %arg2) = (0, 0) to (3, 3) step (1, 3) reduce ("assign") -> (memref<3xf32>) {
+    // CHECK-NEXT: affine.parallel
+    %3 = affine.parallel (%arg3, %arg4) = (%arg1, %arg2) to (%arg1 + 1, %arg2 + 3) reduce ("assign") -> (memref<3xf32>) {
+      %4 = pxa.load %arg0[%arg3, %arg4] : memref<3x3xf32>
+      // CHECK: pxa.reduce
+      %5 = pxa.reduce maxf %4, %1[%arg3] : memref<3xf32>
+      affine.yield %5 : memref<3xf32>
+    }
+    // CHECK: affine.yield
+    affine.yield %3 : memref<3xf32>
+  }
+  return %2 : memref<3xf32>
+}
