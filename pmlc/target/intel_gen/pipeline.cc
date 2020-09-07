@@ -131,7 +131,8 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
-  // Move accumulation indexes into an inner loop
+  // Do subgroup or accumulation
+  // pm.addPass(pmlc::dialect::pxa::createSubgroupsPass());
   pm.addPass(pmlc::dialect::pxa::createTileAccumulatePass());
   pm.addPass(pmlc::dialect::pxa::createNestLoopsPass());
   pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass(/*promote=*/false));
@@ -139,8 +140,8 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCSEPass());
 
   // Assign GPU blocks + threads to outermost loop
-  pm.addPass(pmlc::dialect::pxa::createGPUThreadPass(/*maxThreads=*/128));
-  pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass(/*promote=*/false));
+  pm.addPass(pmlc::dialect::pxa::createGPUThreadPass(/*maxThreads=*/64));
+  pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
@@ -159,6 +160,10 @@ void pipelineBuilder(OpPassManager &pm) {
 
   // Fix booleans
   pm.addPass(dialect::stdx::createI1StorageToI32Pass());
+
+  // Devectorize
+  pm.addPass(createSubgroupBroadcastPass());
+  pm.addPass(createCSEPass());
 
   // Lower mapped scf.parallel's to GPU
   pm.addPass(createParallelLoopToGpuPass());
