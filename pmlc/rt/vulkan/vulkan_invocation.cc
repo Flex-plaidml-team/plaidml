@@ -214,6 +214,8 @@ void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
   kernel_dst->deps.push_back(bufferMemoryBarrier);
 }
 
+#include <ctime>
+
 void VulkanInvocation::submitCommandBuffers() {
   using fp_milliseconds =
       std::chrono::duration<double, std::chrono::milliseconds::period>;
@@ -222,9 +224,19 @@ void VulkanInvocation::submitCommandBuffers() {
 
   createSchedule();
 
+  struct timespec before, after;
+  float interval;
+  clock_gettime(CLOCK_MONOTONIC, &before);
   submitCommandBuffersToQueue();
+  clock_gettime(CLOCK_MONOTONIC, &after);
+  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
+  IVLOG(1, "submitCommandBuffersToQueue time is " <<  interval << " ms");
 
+  clock_gettime(CLOCK_MONOTONIC, &before);
   throwOnVulkanError(vkQueueWaitIdle(device->getQueue()), "vkQueueWaitIdle");
+  clock_gettime(CLOCK_MONOTONIC, &after);
+  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
+  IVLOG(1, "vkQueueWaitIdle time is " <<  interval << " ms");
 
   if (device->getTimestampValidBits()) {
     uint64_t *results = reinterpret_cast<uint64_t *>(
@@ -276,7 +288,12 @@ void VulkanInvocation::submitCommandBuffers() {
                  << total_memxfer_ns.count() * 100 / overall_ns.count() << "%");
   }
 
+  clock_gettime(CLOCK_MONOTONIC, &before);
   updateHostMemoryBuffers();
+  clock_gettime(CLOCK_MONOTONIC, &after);
+  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
+  IVLOG(1, "updateHostMemoryBuffers time is " <<  interval << " ms");
+
 }
 
 void VulkanInvocation::setResourceData(const ResourceData &resData) {

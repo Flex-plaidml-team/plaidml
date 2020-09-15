@@ -493,6 +493,14 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
   // Create call to 'submitCommandBuffers' and 'deinitVulkan' runtime function
   // after the last GpuLauchFunc.
   if (lauchFuncIndex == numKernel - 1) {
+    auto timerMid = builder.create<LLVM::CallOp>(loc,
+	ArrayRef<Type>{getLLVMPointerType()},
+	builder.getSymbolRefAttr(kHostTimer), ArrayRef<Value>{});
+
+    builder.create<LLVM::CallOp>(loc,
+	ArrayRef<Type>{}, builder.getSymbolRefAttr(kGetHostExecTime),
+	ArrayRef<Value>{timerBefore.getResult(0), timerMid.getResult(0)});
+
     builder.create<LLVM::CallOp>(
         loc, ArrayRef<Type>{}, builder.getSymbolRefAttr(kSubmitCommandBuffers),
         ArrayRef<Value>{vulkanRuntime});
@@ -507,7 +515,7 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
 
     builder.create<LLVM::CallOp>(loc,
 	ArrayRef<Type>{}, builder.getSymbolRefAttr(kGetHostExecTime),
-	ArrayRef<Value>{timerBefore.getResult(0), timerAfter.getResult(0)});
+	ArrayRef<Value>{timerMid.getResult(0), timerAfter.getResult(0)});
   }
 
   // Print buffers
