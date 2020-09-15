@@ -42,6 +42,8 @@ using mlir::Value;
 
 static constexpr const char *kSPIRVBinary = "SPIRV_BIN";
 static constexpr const char *kPrint_memref_f32 = "print_memref_f32";
+static constexpr const char *kHostTimer = "hostTimer";
+static constexpr const char *kGetHostExecTime = "getHostExecTime";
 static constexpr const char *kInitVulkan = "initVulkan";
 static constexpr const char *kDeinitVulkan = "deinitVulkan";
 static constexpr const char *kSubmitCommandBuffers = "submitCommandBuffers";
@@ -200,6 +202,8 @@ void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
   for (auto spirvModule :
        llvm::make_early_inc_range(getOperation().getOps<spirv::ModuleOp>()))
     spirvModule.erase();
+
+  getOperation().dump();
 }
 
 LogicalResult ConvertGpuLaunchFuncToVulkanCalls::createBinaryShader(
@@ -332,6 +336,18 @@ void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
   OpBuilder builder(module.getBody()->getTerminator());
 
   builder.create<LLVM::LLVMFuncOp>(
+      loc, kHostTimer,
+      LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kGetHostExecTime,
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType(),
+			getLLVMPointerType()},
+                                    /*isVarArg=*/false));
+
+
+  builder.create<LLVM::LLVMFuncOp>(
       loc, kInitVulkan,
       LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
                                     /*isVarArg=*/false));
@@ -406,6 +422,15 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
   ModuleOp module = getOperation();
   OpBuilder builder(launchOp);
   Location loc = launchOp.getLoc();
+  mlir::LLVM::CallOp timerBefore, timerAfter;
+
+  if (lauchFuncIndex == numKernel - 1) {
+    timerBefore = builder.create<LLVM::CallOp>(loc,
+	ArrayRef<Type>{getLLVMPointerType()},
+	builder.getSymbolRefAttr(kHostTimer), ArrayRef<Value>{});
+    auto *parentBlock = timerBefore.getOperation()->getBlock();
+    timerBefore.getOperation()->moveBefore(&parentBlock->front());
+  }
 
   // Create call to `initVulkan` before the first GpuLauchFunc.
   if (lauchFuncIndex == 0) {
@@ -475,6 +500,14 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
     builder.create<LLVM::CallOp>(loc, ArrayRef<Type>{},
                                  builder.getSymbolRefAttr(kDeinitVulkan),
                                  ArrayRef<Value>{vulkanRuntime});
+
+    timerAfter = builder.create<LLVM::CallOp>(loc,
+	ArrayRef<Type>{getLLVMPointerType()},
+	builder.getSymbolRefAttr(kHostTimer), ArrayRef<Value>{});
+
+    builder.create<LLVM::CallOp>(loc,
+	ArrayRef<Type>{}, builder.getSymbolRefAttr(kGetHostExecTime),
+	ArrayRef<Value>{timerBefore.getResult(0), timerAfter.getResult(0)});
   }
 
   // Print buffers
