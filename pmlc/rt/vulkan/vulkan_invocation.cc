@@ -20,6 +20,25 @@
 #include "pmlc/rt/vulkan/vulkan_error.h"
 #include "pmlc/util/logging.h"
 
+#include <ctime>
+#define SET_TIMER(timespec)	clock_gettime(CLOCK_MONOTONIC, &timespec)
+#define TIME_ELAPSED(before, after, level, str) \
+	{					\
+		float interval;			\
+		interval = ((((after).tv_sec - (before).tv_sec) * 1000.0) + (((after).tv_nsec - (before).tv_nsec) / 1000000.0)); \
+		IVLOG(level, "Time elapsed in " << str << ": " << interval << " ms");	\
+	}
+#define TIME_ELAPSED_TILL_NOW(before, after, str)	\
+	{						\
+		SET_TIMER(after);			\
+		TIME_ELAPSED(before, after, 1, str)	\
+	}
+#define TIME_ELAPSED_TILL_NOW_LOG_2(before, after, str) \
+	{						\
+		SET_TIMER(after);			\
+		TIME_ELAPSED(before, after, 2, str)	\
+	}
+
 namespace pmlc::rt::vulkan {
 
 VulkanInvocation::VulkanInvocation() : device{Device::current<VulkanDevice>()} {
@@ -47,23 +66,31 @@ VulkanInvocation::VulkanInvocation() : device{Device::current<VulkanDevice>()} {
 }
 
 VulkanInvocation::~VulkanInvocation() {
+  struct timespec before, after, total;
+
   // According to Vulkan spec:
   // "To ensure that no work is active on the device, vkDeviceWaitIdle can be
   // used to gate the destruction of the device. Prior to destroying a device,
   // an application is responsible for destroying/freeing any Vulkan objects
   // that were created using that device as the first parameter of the
   // corresponding vkCreate* or vkAllocate* command."
+  SET_TIMER(before);
   vkDeviceWaitIdle(device->getDevice());
+  TIME_ELAPSED_TILL_NOW(before, after, "~VulkanInvocation vkDeviceWaitIdle");
 
   // Free and destroy.
+  SET_TIMER(before);
   vkFreeCommandBuffers(device->getDevice(), commandPool, commandBuffers.size(),
                        commandBuffers.data());
   vkDestroyCommandPool(device->getDevice(), commandPool, nullptr);
   vkDestroyQueryPool(device->getDevice(), timestampQueryPool,
                      /*allocator=*/nullptr);
+  TIME_ELAPSED_TILL_NOW(before, after, "~VulkanInvocation freeing buffer and pool");
 
+  SET_TIMER(total);
   for (const auto &action : schedule) {
     if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
+      SET_TIMER(before);
       vkFreeDescriptorSets(device->getDevice(), kernel->descriptorPool,
                            kernel->descriptorSets.size(),
                            kernel->descriptorSets.data());
@@ -87,8 +114,10 @@ VulkanInvocation::~VulkanInvocation() {
           vkDestroyBuffer(device->getDevice(), memoryBuffer.buffer, nullptr);
         }
       }
+      TIME_ELAPSED_TILL_NOW_LOG_2(before, after, "~VulkanInvocation every LaunchKernelAction");
     }
   }
+  TIME_ELAPSED_TILL_NOW(total, after, "~VulkanInvocation traversing all LaunchKernelAction");
 }
 
 void VulkanInvocation::createLaunchKernelAction(uint8_t *shader, uint32_t size,
