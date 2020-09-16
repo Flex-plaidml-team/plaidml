@@ -215,6 +215,13 @@ void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
 }
 
 #include <ctime>
+#define SET_TIMER(timespec)	clock_gettime(CLOCK_MONOTONIC, &timespec)
+#define TIME_ELAPSED(before, after, str) \
+	{				 \
+		float interval;		 \
+		interval = ((((after).tv_sec - (before).tv_sec) * 1000.0) + (((after).tv_nsec - (before).tv_nsec) / 1000000.0)); \
+		IVLOG(1, "Time elapsed in " << str << ": " << interval << " ms");	\
+	}
 
 void VulkanInvocation::submitCommandBuffers() {
   using fp_milliseconds =

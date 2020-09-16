@@ -92,8 +92,7 @@ void getHostExecTime(void *timerBefore, void *timerAfter) {
   struct timespec *after = (struct timespec *)timerAfter;
   float interval;
   interval = ((after->tv_sec - before->tv_sec) * 1000.0) + ((after->tv_nsec - before->tv_nsec) / 1000000.0);
-  //IVLOG(1, "Elapsed Time is " << interval << " ms");
-  printf("Elapsed Time is %lf ms\n", interval);
+  IVLOG(1, "Elapsed Time is " << interval << " ms");
 }
 
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
