@@ -118,20 +118,27 @@ VulkanInvocation::~VulkanInvocation() {
     }
   }
   TIME_ELAPSED_TILL_NOW(total, after, "~VulkanInvocation traversing all LaunchKernelAction");
+
+  for (auto func : timeData){
+    IVLOG(1, "Time elapsed in " <<func.first << ": " << func.second << " ms");
+  }
 }
 
 void VulkanInvocation::createLaunchKernelAction(uint8_t *shader, uint32_t size,
                                                 const char *entryPoint,
                                                 NumWorkGroups numWorkGroups) {
+  timer.punchPoint();
   curr = std::make_shared<LaunchKernelAction>();
 
   curr->binary = shader;
   curr->binarySize = size;
   curr->entryPoint = entryPoint;
   curr->workGroups = numWorkGroups;
+  timeData["createLaunchKernelAction"] += timer.getDuration();
 }
 
 void VulkanInvocation::setLaunchKernelAction() {
+  timer.punchPoint();
   // Create logical device, shader module and memory buffers.
   checkResourceData();
   createMemoryBuffers();
@@ -150,11 +157,14 @@ void VulkanInvocation::setLaunchKernelAction() {
   createDescriptorPool();
   allocateDescriptorSets();
   setWriteDescriptors();
+  timeData["tSetVulkanLaunchKernelAction"] += timer.getDuration();
 }
 
 void VulkanInvocation::addLaunchActionToSchedule() {
+  timer.punchPoint();
   schedule.push_back(curr);
   curr = nullptr;
+  timeData["addLaunchActionToSchedule"] += timer.getDuration();
 }
 
 void VulkanInvocation::createMemoryTransferAction(VkBuffer src, VkBuffer dst,
@@ -401,6 +411,7 @@ void VulkanInvocation::checkResourceData() {
 }
 
 void VulkanInvocation::createMemoryBuffers() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createMemoryBuffers: curr is nullptr!"};
   }
@@ -506,9 +517,11 @@ void VulkanInvocation::createMemoryBuffers() {
     // Associate device memory buffers with a descriptor set.
     curr->deviceMemoryBufferMap[descriptorSetIndex] = deviceMemoryBuffers;
   }
+  timeData["createMemoryBuffers"] += timer.getDuration();
 }
 
 void VulkanInvocation::createShaderModule() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createShaderModule : curr is nullptr!"};
   }
@@ -525,9 +538,11 @@ void VulkanInvocation::createShaderModule() {
                                           &shaderModuleCreateInfo, 0,
                                           &curr->shaderModule),
                      "vkCreateShaderModule");
+  timeData["createShaderModule"] += timer.getDuration();
 }
 
 void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{
         "initDescriptorSetLayoutBindingMap: curr is nullptr!"};
@@ -552,9 +567,11 @@ void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
     curr->descriptorSetLayoutBindingMap[descriptorSetIndex] =
         descriptorSetLayoutBindings;
   }
+  timeData["initDescriptorSetLayoutBindingMap"] += timer.getDuration();
 }
 
 void VulkanInvocation::createDescriptorSetLayout() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createDescriptorSetLayout: curr is nullptr!"};
   }
@@ -600,9 +617,11 @@ void VulkanInvocation::createDescriptorSetLayout() {
     curr->descriptorSetInfoPool.push_back(
         {descriptorSetIndex, descriptorSize, descriptorType});
   }
+  timeData["createDescriptorSetLayout"] += timer.getDuration();
 }
 
 void VulkanInvocation::createPipelineLayout() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createPipelineLayout: curr is nullptr!"};
   }
@@ -621,9 +640,11 @@ void VulkanInvocation::createPipelineLayout() {
                                             &pipelineLayoutCreateInfo, 0,
                                             &curr->pipelineLayout),
                      "vkCreatePipelineLayout");
+  timeData["createPipelineLayout"] = timer.getDuration();
 }
 
 void VulkanInvocation::createComputePipeline() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createComputePipeline: curr is nullptr!"};
   }
@@ -651,9 +672,11 @@ void VulkanInvocation::createComputePipeline() {
                                               &computePipelineCreateInfo, 0,
                                               &curr->pipeline),
                      "vkCreateComputePipelines");
+  timeData["createComputePipeline"] += timer.getDuration();
 }
 
 void VulkanInvocation::createDescriptorPool() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"createDescriptorPool: curr is nullptr!"};
   }
@@ -679,9 +702,11 @@ void VulkanInvocation::createDescriptorPool() {
                                             &descriptorPoolCreateInfo, 0,
                                             &curr->descriptorPool),
                      "vkCreateDescriptorPool");
+  timeData["createDescriptorPool"] += timer.getDuration();
 }
 
 void VulkanInvocation::allocateDescriptorSets() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"allocateDescriptorSets: curr is nullptr!"};
   }
@@ -700,9 +725,11 @@ void VulkanInvocation::allocateDescriptorSets() {
                                               &descriptorSetAllocateInfo,
                                               curr->descriptorSets.data()),
                      "vkAllocateDescriptorSets");
+  timeData["allocateDescriptorSets"] += timer.getDuration();
 }
 
 void VulkanInvocation::setWriteDescriptors() {
+  timer.punchPoint();
   if (!curr) {
     throw std::runtime_error{"setWriteDescriptors: curr is nullptr!"};
   }
@@ -737,6 +764,7 @@ void VulkanInvocation::setWriteDescriptors() {
     // Increment descriptor set iterator.
     ++descriptorSetIt;
   }
+  timeData["setWriteDescriptors"] += timer.getDuration();
 }
 
 void VulkanInvocation::createSchedule() {

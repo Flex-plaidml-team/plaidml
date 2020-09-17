@@ -212,7 +212,6 @@ void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
        llvm::make_early_inc_range(getOperation().getOps<spirv::ModuleOp>()))
     spirvModule.erase();
 
-  getOperation().dump();
 }
 
 LogicalResult ConvertGpuLaunchFuncToVulkanCalls::createBinaryShader(
