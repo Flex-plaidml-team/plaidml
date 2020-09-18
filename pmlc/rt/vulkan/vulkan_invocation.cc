@@ -481,9 +481,12 @@ void VulkanInvocation::createMemoryBuffers() {
                                      0, reinterpret_cast<void **>(&payload)),
                          "vkMapMemory");
 
+      timer.punchPoint();
       // Copy host memory into the mapped area.
       std::memcpy(payload, resourceDataBindingPair.second.ptr, bufferSize);
+      timeData["host memory into mapped area, memcpy"] += timer.getDuration();
       vkUnmapMemory(device->getDevice(), memoryBuffer.deviceMemory);
+      timeData["host memory into mapped area, vkUnmapMemory"] += timer.getConstantDuration();
 
       VkBufferCreateInfo bufferCreateInfo = {};
       bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
