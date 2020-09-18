@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <stack>
 
 #include "pmlc/rt/vulkan/vulkan_device.h"
 
@@ -134,18 +135,28 @@ struct MemoryTransferAction : Action {
 template <typename T>
 class MiniTimer {
   using tclock = std::chrono::steady_clock;
-
 public:
-  void punchPoint() { Point = tclock::now(); }
+  void punchPoint() { contain.push(tclock::now()); }
   float getDuration() {
+    if (contain.empty()){
+      return getConstantDuration();
+    }
+
+    auto duration = std::chrono::duration_cast<std::chrono::duration<float, T>>(
+        tclock::now() - contain.top());
+    Point = contain.top();
+    contain.pop();
+    return duration.count();
+  }
+  float getConstantDuration(){
     auto tempPoint = tclock::now();
     auto duration = std::chrono::duration_cast<std::chrono::duration<float, T>>(
         tempPoint - Point);
     Point = tempPoint;
     return duration.count();
   }
-
 private:
+  std::stack<tclock::time_point> contain;
   tclock::time_point Point;
 };
 
