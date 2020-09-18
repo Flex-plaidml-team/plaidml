@@ -14,10 +14,10 @@
 #pragma once
 
 #include <chrono>
-#include <memory>
-#include <vector>
 #include <map>
+#include <memory>
 #include <stack>
+#include <vector>
 
 #include "pmlc/rt/vulkan/vulkan_device.h"
 
@@ -138,24 +138,28 @@ class MiniTimer {
 public:
   void punchPoint() { contain.push(tclock::now()); }
   float getDuration() {
-    if (contain.empty()){
+    if (contain.empty()) {
       return getConstantDuration();
     }
-
-    auto duration = std::chrono::duration_cast<std::chrono::duration<float, T>>(
-        tclock::now() - contain.top());
     Point = contain.top();
+    auto duration = timePointDistance(tclock::now(), Point);
     contain.pop();
     return duration.count();
   }
-  float getConstantDuration(){
+  float getConstantDuration() {
     auto tempPoint = tclock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::duration<float, T>>(
-        tempPoint - Point);
+    auto duration = timePointDistance(tempPoint, Point);
     Point = tempPoint;
     return duration.count();
   }
+
 private:
+  std::chrono::duration<float, T>
+  timePointDistance(tclock::time_point endPoint,
+                    tclock::time_point beginPoint) {
+    return std::chrono::duration_cast<std::chrono::duration<float, T>>(
+        endPoint - beginPoint);
+  }
   std::stack<tclock::time_point> contain;
   tclock::time_point Point;
 };
