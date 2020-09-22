@@ -159,8 +159,7 @@ public:
            spirv::Capability::Float16},
           ArrayRef<spirv::Extension>({
               spirv::Extension::SPV_KHR_storage_buffer_storage_class,
-              spirv::Extension::SPV_INTEL_subgroups,
-              spirv::Extension::SPV_KHR_subgroup_vote}),
+          }),
           &getContext());
       getOperation().setAttr(
           spirv::getTargetEnvAttrName(),
