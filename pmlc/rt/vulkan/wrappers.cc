@@ -17,6 +17,7 @@
 
 #include <mutex>
 #include <numeric>
+#include <ctime>
 
 #include "half.hpp"
 #include "llvm/Support/raw_ostream.h"
@@ -25,6 +26,7 @@
 
 #include "pmlc/rt/symbol_registry.h"
 #include "pmlc/rt/vulkan/vulkan_invocation.h"
+#include "pmlc/util/logging.h"
 
 using pmlc::rt::Device;
 
@@ -79,6 +81,20 @@ void submitCommandBuffers(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->submitCommandBuffers();
 }
 
+void *hostTimer() {
+  struct timespec *timer = (struct timespec *)malloc(sizeof(struct timespec));
+  clock_gettime(CLOCK_MONOTONIC, timer);
+  return (void *)timer;
+}
+
+void getHostExecTime(void *timerBefore, void *timerAfter) {
+  struct timespec *before = (struct timespec *)timerBefore;
+  struct timespec *after = (struct timespec *)timerAfter;
+  float interval;
+  interval = ((after->tv_sec - before->tv_sec) * 1000.0) + ((after->tv_nsec - before->tv_nsec) / 1000000.0);
+  IVLOG(1, "Elapsed Time is " << interval << " ms");
+}
+
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
       void *vkInvocation, DescriptorSetIndex setIndex, BindingIndex bindIndex, \
@@ -122,6 +138,10 @@ struct Registration {
                    reinterpret_cast<void *>(addVulkanLaunchActionToSchedule));
     registerSymbol("submitCommandBuffers",
                    reinterpret_cast<void *>(submitCommandBuffers));
+    registerSymbol("hostTimer",
+                   reinterpret_cast<void *>(hostTimer));
+    registerSymbol("getHostExecTime",
+                   reinterpret_cast<void *>(getHostExecTime));
     registerSymbol("_mlir_ciface_bindBufferFloat16",
                    reinterpret_cast<void *>(_mlir_ciface_bindBufferFloat16));
     registerSymbol("_mlir_ciface_bindBufferFloat32",
