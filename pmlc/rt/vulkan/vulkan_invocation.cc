@@ -13,31 +13,10 @@
 
 #include "pmlc/rt/vulkan/vulkan_invocation.h"
 
-#include <chrono>
-
 #include "llvm/Support/FormatVariadic.h"
 
 #include "pmlc/rt/vulkan/vulkan_error.h"
 #include "pmlc/util/logging.h"
-
-#include <ctime>
-#define SET_TIMER(timespec)	clock_gettime(CLOCK_MONOTONIC, &timespec)
-#define TIME_ELAPSED(before, after, level, str) \
-	{					\
-		float interval;			\
-		interval = ((((after).tv_sec - (before).tv_sec) * 1000.0) + (((after).tv_nsec - (before).tv_nsec) / 1000000.0)); \
-		IVLOG(level, "Time elapsed in " << str << ": " << interval << " ms");	\
-	}
-#define TIME_ELAPSED_TILL_NOW(before, after, str)	\
-	{						\
-		SET_TIMER(after);			\
-		TIME_ELAPSED(before, after, 1, str)	\
-	}
-#define TIME_ELAPSED_TILL_NOW_LOG_2(before, after, str) \
-	{						\
-		SET_TIMER(after);			\
-		TIME_ELAPSED(before, after, 2, str)	\
-	}
 
 namespace pmlc::rt::vulkan {
 
@@ -66,31 +45,29 @@ VulkanInvocation::VulkanInvocation() : device{Device::current<VulkanDevice>()} {
 }
 
 VulkanInvocation::~VulkanInvocation() {
-  struct timespec before, after, total;
-
   // According to Vulkan spec:
   // "To ensure that no work is active on the device, vkDeviceWaitIdle can be
   // used to gate the destruction of the device. Prior to destroying a device,
   // an application is responsible for destroying/freeing any Vulkan objects
   // that were created using that device as the first parameter of the
   // corresponding vkCreate* or vkAllocate* command."
-  SET_TIMER(before);
+  timer.punchPoint();
   vkDeviceWaitIdle(device->getDevice());
-  TIME_ELAPSED_TILL_NOW(before, after, "~VulkanInvocation vkDeviceWaitIdle");
+  timeData["~VulkanInvocation vkDeviceWaitIdle"] = timer.getDuration();
 
   // Free and destroy.
-  SET_TIMER(before);
+  timer.punchPoint();
   vkFreeCommandBuffers(device->getDevice(), commandPool, commandBuffers.size(),
                        commandBuffers.data());
   vkDestroyCommandPool(device->getDevice(), commandPool, nullptr);
   vkDestroyQueryPool(device->getDevice(), timestampQueryPool,
                      /*allocator=*/nullptr);
-  TIME_ELAPSED_TILL_NOW(before, after, "~VulkanInvocation freeing buffer and pool");
+  timeData["~VulkanInvocation freeing buffer and pool"] = timer.getDuration();
 
-  SET_TIMER(total);
+  timer.punchPoint();
   for (const auto &action : schedule) {
     if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
-      SET_TIMER(before);
+      timer.punchPoint();
       vkFreeDescriptorSets(device->getDevice(), kernel->descriptorPool,
                            kernel->descriptorSets.size(),
                            kernel->descriptorSets.data());
@@ -114,10 +91,10 @@ VulkanInvocation::~VulkanInvocation() {
           vkDestroyBuffer(device->getDevice(), memoryBuffer.buffer, nullptr);
         }
       }
-      TIME_ELAPSED_TILL_NOW_LOG_2(before, after, "~VulkanInvocation every LaunchKernelAction");
+      timeData["~VulkanInvocation every LaunchKernelAction"] = timer.getDuration();
     }
   }
-  TIME_ELAPSED_TILL_NOW(total, after, "~VulkanInvocation traversing all LaunchKernelAction");
+  timeData["~VulkanInvocation traversing all LaunchKernelAction"] = timer.getDuration();
 
   for (auto func : timeData){
     IVLOG(1, "Time elapsed in " <<func.first << ": " << func.second << " ms");
@@ -253,15 +230,6 @@ void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
   kernel_dst->deps.push_back(bufferMemoryBarrier);
 }
 
-#include <ctime>
-#define SET_TIMER(timespec)	clock_gettime(CLOCK_MONOTONIC, &timespec)
-#define TIME_ELAPSED(before, after, str) \
-	{				 \
-		float interval;		 \
-		interval = ((((after).tv_sec - (before).tv_sec) * 1000.0) + (((after).tv_nsec - (before).tv_nsec) / 1000000.0)); \
-		IVLOG(1, "Time elapsed in " << str << ": " << interval << " ms");	\
-	}
-
 void VulkanInvocation::submitCommandBuffers() {
   using fp_milliseconds =
       std::chrono::duration<double, std::chrono::milliseconds::period>;
@@ -270,19 +238,13 @@ void VulkanInvocation::submitCommandBuffers() {
 
   createSchedule();
 
-  struct timespec before, after;
-  float interval;
-  clock_gettime(CLOCK_MONOTONIC, &before);
+  timer.punchPoint();
   submitCommandBuffersToQueue();
-  clock_gettime(CLOCK_MONOTONIC, &after);
-  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
-  IVLOG(1, "submitCommandBuffersToQueue time is " <<  interval << " ms");
+  timeData["submitCommandBuffersToQueue time is"] = timer.getDuration();
 
-  clock_gettime(CLOCK_MONOTONIC, &before);
+  timer.punchPoint();
   throwOnVulkanError(vkQueueWaitIdle(device->getQueue()), "vkQueueWaitIdle");
-  clock_gettime(CLOCK_MONOTONIC, &after);
-  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
-  IVLOG(1, "vkQueueWaitIdle time is " <<  interval << " ms");
+  timeData["vkQueueWaitIdle time is"] = timer.getDuration();
 
   if (device->getTimestampValidBits()) {
     uint64_t *results = reinterpret_cast<uint64_t *>(
@@ -334,12 +296,9 @@ void VulkanInvocation::submitCommandBuffers() {
                  << total_memxfer_ns.count() * 100 / overall_ns.count() << "%");
   }
 
-  clock_gettime(CLOCK_MONOTONIC, &before);
+  timer.punchPoint();
   updateHostMemoryBuffers();
-  clock_gettime(CLOCK_MONOTONIC, &after);
-  interval = ((after.tv_sec - before.tv_sec) * 1000.0) + ((after.tv_nsec - before.tv_nsec) / 1000000.0);
-  IVLOG(1, "updateHostMemoryBuffers time is " <<  interval << " ms");
-
+  timeData["updateHostMemoryBuffers time is"] = timer.getDuration();
 }
 
 void VulkanInvocation::setResourceData(const ResourceData &resData) {
