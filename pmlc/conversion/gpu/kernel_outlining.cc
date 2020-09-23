@@ -157,8 +157,8 @@ public:
         spirv::getTargetEnvAttrName());
     if (!target_env) {
       auto triple = spirv::VerCapExtAttr::get(
-          spirv::Version::V_1_0,
-          {spirv::Capability::Shader, spirv::Capability::Groups,
+          spirv::Version::V_1_3,
+          {spirv::Capability::Shader, spirv::Capability::GroupNonUniformBallot,
            spirv::Capability::Int64, spirv::Capability::Int16,
            spirv::Capability::Int8, spirv::Capability::Float64,
            spirv::Capability::Float16},

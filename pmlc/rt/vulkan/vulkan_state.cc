@@ -16,7 +16,7 @@ VulkanState::VulkanState() {
   applicationInfo.applicationVersion = 0;
   applicationInfo.pEngineName = "mlir";
   applicationInfo.engineVersion = 0;
-  applicationInfo.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+  applicationInfo.apiVersion = VK_MAKE_VERSION(1, 3, 0);
 
   VkInstanceCreateInfo instanceCreateInfo = {};
   instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
