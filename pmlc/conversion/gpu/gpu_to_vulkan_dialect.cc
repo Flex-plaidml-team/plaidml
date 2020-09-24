@@ -114,11 +114,10 @@ private:
   void declareVulkanFunctions(Location loc);
 
   void getCachedTypes() {
-    llvmDialect = getContext().getRegisteredDialect<LLVM::LLVMDialect>();
-    llvmVoidType = LLVM::LLVMType::getVoidTy(llvmDialect);
-    llvmPointerType = LLVM::LLVMType::getInt8PtrTy(llvmDialect);
-    llvmInt32Type = LLVM::LLVMType::getInt32Ty(llvmDialect);
-    llvmInt64Type = LLVM::LLVMType::getInt64Ty(llvmDialect);
+    llvmVoidType = LLVM::LLVMType::getVoidTy(&getContext());
+    llvmPointerType = LLVM::LLVMType::getInt8PtrTy(&getContext());
+    llvmInt32Type = LLVM::LLVMType::getInt32Ty(&getContext());
+    llvmInt64Type = LLVM::LLVMType::getInt64Ty(&getContext());
 
     OpBuilder builder(getOperation());
     mlirIndexType = builder.getIndexType();
@@ -232,8 +231,7 @@ Value ConvertGpuLaunchFuncToVulkanDialect::createEntryPointNameConstant(
   std::string entryPointGlobalName =
       (name + "_spv_entry_point_name" + std::to_string(lauchFuncIndex)).str();
   return LLVM::createGlobalString(loc, builder, entryPointGlobalName,
-                                  shaderName, LLVM::Linkage::Internal,
-                                  getLLVMDialect());
+                                  shaderName, LLVM::Linkage::Internal);
 }
 
 LogicalResult ConvertGpuLaunchFuncToVulkanDialect::bindBuffers(

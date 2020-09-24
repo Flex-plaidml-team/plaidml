@@ -8,6 +8,7 @@ load("//bzl:plaidml.bzl", "plaidml_cc_library")
 filegroup(
     name = "td_files",
     srcs = [
+        "//pmlc/util:td_files",
         "@llvm-project//mlir:OpBaseTdFiles",
     ],
 )
@@ -28,6 +29,7 @@ gentbl(
             "dialect.h.inc",
         ),
     ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "ops.td",
     td_srcs = [":td_files"],
 )

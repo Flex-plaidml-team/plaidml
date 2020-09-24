@@ -5,11 +5,11 @@
 namespace pmlc::dialect::vulkan {
 
 BufferType BufferType::get(mlir::MLIRContext *context) {
-  return Base::get(context, TypeKinds::BufferType);
+  return Base::get(context);
 }
 
 ShaderModuleType ShaderModuleType::get(mlir::MLIRContext *context) {
-  return Base::get(context, TypeKinds::ShaderModuleType);
+  return Base::get(context);
 }
 
 } // namespace pmlc::dialect::vulkan

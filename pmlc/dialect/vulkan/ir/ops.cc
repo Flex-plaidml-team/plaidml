@@ -15,12 +15,12 @@ namespace pmlc::dialect::vulkan {
 #define GET_OP_CLASSES
 #include "pmlc/dialect/vulkan/ir/ops.cc.inc"
 
-VkDialect::VkDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+void VkDialect::initialize() {
   addTypes<BufferType, ShaderModuleType>();
   addOperations<
 #define GET_OP_LIST
 #include "pmlc/dialect/vulkan/ir/ops.cc.inc" // NOLINT
+#undef GET_OP_LIST
       >();
 }
 

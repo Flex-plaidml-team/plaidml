@@ -22,6 +22,7 @@
 #include "pmlc/dialect/tile/transforms/passes.h"
 #include "pmlc/target/intel_gen/passes.h"
 #include "pmlc/target/x86/passes.h"
+#include "pmlc/conversion/gpu/lowering.h"
 
 // This function may be called to register the MLIR passes with the
 // global registry.
@@ -60,6 +61,7 @@ inline void registerAllPasses() {
   pmlc::conversion::tile_to_pxa::registerPasses();
   pmlc::conversion::gpu_to_spirv::registerPasses();
   pmlc::conversion::gpu_to_comp::registerPasses();
+  pmlc::conversion::gpu::registerPasses();
 
   // Dialect passes
   pmlc::dialect::pxa::registerPasses();
