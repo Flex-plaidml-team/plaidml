@@ -262,8 +262,10 @@ struct SubgroupsPass : public SubgroupsBase<SubgroupsPass> {
 
   void doSubgroups(AffineParallelOp op) {
     SubgroupParams params = {
-        {8, 16}, // Subgroup sizes to consider
-        40,      // Maximum register per thread
+        {32}, // Subgroup sizes to consider
+        40,   // Maximum register per thread
+              //{8, 16}, // Subgroup sizes to consider
+              // 40,      // Maximum register per thread
     };
     SubgroupCostModel cm(params, op);
     if (cm.bestCost == std::numeric_limits<double>::infinity()) {

@@ -992,7 +992,7 @@ class TestBackendOps(unittest.TestCase):
         return b.mean(b.square(diffs))
 
     @opTest([
-        _conv_inp(IN=1, IC=16, OC=16, IS=[6, 5], KS=[3, 3]),
+        _conv_inp(IN=1, IC=32, OC=32, IS=[64, 64], KS=[3, 3]),
     ], 1e-04, skip_theano=True)
     def testWinograd(self, b, im, km, df):
         return [
