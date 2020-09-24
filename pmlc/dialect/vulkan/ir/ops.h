@@ -35,6 +35,8 @@ using mlir::Value;
 using mlir::ValueRange;
 
 namespace OpTrait = mlir::OpTrait;
+namespace SideEffects = mlir::SideEffects;
+namespace MemoryEffects = mlir::MemoryEffects;
 
 #define GET_OP_CLASSES
 #include "pmlc/dialect/vulkan/ir/ops.h.inc"

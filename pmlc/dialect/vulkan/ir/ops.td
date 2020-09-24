@@ -1,13 +1,7 @@
 #ifndef __VULKAN_OPS__
 #define __VULKAN_OPS__
 
-#ifndef OP_BASE
 include "mlir/IR/OpBase.td"
-#endif
-
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "pmlc/util/enums.td"
-include "pmlc/util/interfaces.td"
 
 def Vk_Dialect : Dialect {
   let name = "vk";

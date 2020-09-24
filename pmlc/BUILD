@@ -69,6 +69,7 @@ plaidml_cc_library(
         "//pmlc/dialect/stdx",
         "//pmlc/dialect/tile",
         "//pmlc/dialect/xsmm",
+        "//pmlc/dialect/vulkan",
         "//pmlc/target/demo",
         "//pmlc/target/intel_gen",
         "//pmlc/target/x86",
