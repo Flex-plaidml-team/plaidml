@@ -12,17 +12,6 @@ using namespace mlir; // NOLINT
 
 namespace pmlc::dialect::vulkan {
 
-#define GET_OP_CLASSES
-#include "pmlc/dialect/vulkan/ir/ops.cc.inc"
-
-void VkDialect::initialize() {
-  addTypes<BufferType, ShaderModuleType>();
-  addOperations<
-#define GET_OP_LIST
-#include "pmlc/dialect/vulkan/ir/ops.cc.inc" // NOLINT
-#undef GET_OP_LIST
-      >();
-}
 
 void VkDialect::printType(Type type, mlir::DialectAsmPrinter &printer) const {
   auto &os = printer.getStream();
@@ -36,14 +25,26 @@ void VkDialect::printType(Type type, mlir::DialectAsmPrinter &printer) const {
 Type VkDialect::parseType(mlir::DialectAsmParser &parser) const {
   auto spec = parser.getFullSymbolSpec();
   auto type = llvm::StringSwitch<Type>(spec)
-                  .Case("vbuffer", BufferType::get(getContext()))
-                  .Case("ShaderModule", ShaderModuleType::get(getContext()))
-                  .Default(Type());
+  .Case("vbuffer", BufferType::get(getContext()))
+  .Case("ShaderModule", ShaderModuleType::get(getContext()))
+  .Default(Type());
   if (!type) {
     auto loc = parser.getEncodedSourceLoc(parser.getNameLoc());
     emitError(loc, llvm::formatv("Unknown vulkan type: '{0}'", spec));
   }
   return type;
+}
+
+#define GET_OP_CLASSES
+#include "pmlc/dialect/vulkan/ir/ops.cc.inc"
+
+void VkDialect::initialize() {
+  addTypes<BufferType, ShaderModuleType>();
+  addOperations<
+#define GET_OP_LIST
+#include "pmlc/dialect/vulkan/ir/ops.cc.inc" // NOLINT
+#undef GET_OP_LIST
+  >();
 }
 
 } // namespace pmlc::dialect::vulkan
