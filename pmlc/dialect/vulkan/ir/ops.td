@@ -35,6 +35,18 @@ def Vk_Copy : Vk_Op<"copy"> {
   let results = (outs VkBuffer:$dst);
 }
 
+def Vk_hostWrite : Vk_Op<"Vk_hostWrite",>
+                       , Arguments<(ins AnyMemRef:$hostMem)>
+                       , Results<(outs AnyType:$outEvent)> {
+  let summary = "Schedules data copy from host for use in execution environment.";
+}
+
+def Vk_hostRead : Vk_Op<"schedule_read",>
+                      , Arguments<(ins AnyMemRef:$vkBuffer>
+                      , Results<(outs AnyType:$outEvent)> {
+  let summary = "Schedules data copy from execution environment for use on host.";
+}
+
 def Vk_Dispatch : Vk_Op<"dispatch"> {
   let arguments = (ins
     VkShaderModule:$module,
@@ -51,65 +63,32 @@ def Vk_Dispatch : Vk_Op<"dispatch"> {
 }
 
 def Vk_InitVulkanCall : Vk_Op<"initvulkancall"> {
-  let results = (outs VkBuffer);
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, Type resultType, "
-    "FlatSymbolRefAttr callee",
-    [{
-      result.addAttribute("callee", callee);
-      result.addTypes(resultType);
-    }]>,
-  ];
+   let summary = "init vulkan device and command buffer"
+}
+
+def Vk_DeinitVulkan : Vk_Op<"DeinitVulkan"> {
+   let summary = "deinit vulkan device and command buffer"
 }
 
 def Vk_CreateVulkanLaunchKernelAction : Vk_Op<"createVulkanLaunchKernelAction"> {
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, FlatSymbolRefAttr callee, "
-    "ArrayRef<Value> operands = {}",
-    [{
-      result.addAttribute("callee", callee);
-    }]>,
-  ];
+
 }
 
-def Vk_SetLaunchKernelAction : Vk_Op<"setLaunchKernelAction"> {
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, FlatSymbolRefAttr callee, "
-    "ArrayRef<Value> operands = {}",
-    [{
-      result.addAttribute("callee", callee);
-    }]>,
+def Vk_SetLaunchKernelAction : Vk_Op<"setLaunchKernelAction">,
+                               Arguments<(ins Variadic<VkBuffer>:$operands),{
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, GPUFuncOp kernelFunc, "
+              "ValueRange kernelOperands">,
   ];
 }
 
 def Vk_AddVulkanLaunchActionToSchedule : Vk_Op<"AddVulkanLaunchActionToSchedule"> {
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, FlatSymbolRefAttr callee, "
-    "ArrayRef<Value> operands = {}",
-    [{
-      result.addAttribute("callee", callee);
-    }]>,
-  ];
+
 }
 
 def Vk_SubmitCommandBuffers : Vk_Op<"SubmitCommandBuffers"> {
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, FlatSymbolRefAttr callee, "
-    "ArrayRef<Value> operands = {}",
-    [{
-      result.addAttribute("callee", callee);
-    }]>,
-  ];
+
 }
 
-def Vk_DeinitVulkan : Vk_Op<"DeinitVulkan"> {
-  let builders = [OpBuilder<
-    "Builder builder, OperationState &result, FlatSymbolRefAttr callee, "
-    "ArrayRef<Value> operands = {}",
-    [{
-      result.addAttribute("callee", callee);
-    }]>,
-  ];
-}
 
 #endif // __VULKAN_OPS__
