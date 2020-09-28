@@ -63,6 +63,7 @@ plaidml_cc_library(
         "//pmlc/conversion/gpu_to_spirv",
         "//pmlc/conversion/pxa_to_affine",
         "//pmlc/conversion/stdx_to_llvm",
+        "//pmlc/conversion/vulkan_to_llvm",
         "//pmlc/conversion/tile_to_pxa",
         "//pmlc/dialect/comp",
         "//pmlc/dialect/eltwise",
