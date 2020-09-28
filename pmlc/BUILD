@@ -59,6 +59,7 @@ plaidml_cc_library(
         ":hdrs",
         "//pmlc/conversion/gpu",
         "//pmlc/conversion/gpu_to_comp",
+        "//pmlc/conversion/gpu_to_vulkan",
         "//pmlc/conversion/gpu_to_spirv",
         "//pmlc/conversion/pxa_to_affine",
         "//pmlc/conversion/stdx_to_llvm",
