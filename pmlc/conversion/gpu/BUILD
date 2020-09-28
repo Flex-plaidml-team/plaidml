@@ -24,7 +24,6 @@ plaidml_cc_library(
     name = "gpu",
     srcs = [
         "gpu_to_vulkan.cc",
-        "gpu_to_vulkan_dialect.cc",
         "kernel_outlining.cc",
         "pass_detail.h",
     ],
