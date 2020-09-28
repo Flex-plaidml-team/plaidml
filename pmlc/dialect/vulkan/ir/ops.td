@@ -24,6 +24,7 @@ class Vk_Op<string mnemonic, list<OpTrait> traits = []> :
 def Vk_CreateShaderModuleOp : Vk_Op<"create_shader_module">,
                               Arguments<(ins Variadic<VkBuffer>:$operands)>{
   let summary = "new Module with local buffer ";
+  let regions = (region AnyRegion:$body);
 //  let results = (outs VkShaderModule:$module);
 }
 

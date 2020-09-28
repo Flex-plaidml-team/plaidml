@@ -17,7 +17,6 @@ namespace pmlc::conversion::gpu_to_vulkan {
 
 void populateGpuToVulkanPatterns(
     mlir::MLIRContext *context,
-//    const pmlc::dialect::comp::ExecEnvType &execEnvType,
     mlir::OwningRewritePatternList &patterns);
 
 std::unique_ptr<mlir::Pass> createConvertGpuToVulkanPass();
