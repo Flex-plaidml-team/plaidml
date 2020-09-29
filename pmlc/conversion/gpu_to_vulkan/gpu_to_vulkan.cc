@@ -1,4 +1,5 @@
 // Copyright 2020, Intel Corporation
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -20,6 +21,10 @@
 #include "llvm/ADT/SmallString.h"
 
 #include "mlir/include/mlir/IR/Block.h"
+#include "mlir/include/mlir/IR/Builders.h"
+#include "mlir/include/mlir/IR/Function.h"
+#include "mlir/include/mlir/IR/Region.h"
+#include "mlir/include/mlir/Support/LogicalResult.h"
 #include "pmlc/conversion/gpu_to_vulkan/pass_detail.h"
 #include "pmlc/conversion/gpu_to_vulkan/passes.h"
 #include "pmlc/dialect/vulkan/ir/ops.h"
@@ -29,179 +34,200 @@ namespace pmlc::conversion::gpu_to_vulkan {
 
 namespace gpu = mlir::gpu;
 namespace vulkan = pmlc::dialect::vulkan;
-using mlir::applyPartialConversion;
+
 using mlir::ArrayRef;
 using mlir::CallOp;
-using mlir::ConversionTarget;
-using mlir::failure;
 using mlir::FuncOp;
 using mlir::FunctionType;
-using mlir::Location;
 using mlir::LogicalResult;
 using mlir::MemRefType;
 using mlir::MLIRContext;
-using mlir::ModuleOp;
 using mlir::OpBuilder;
-using mlir::OpRewritePattern;
-using mlir::OwningRewritePatternList;
-using mlir::PatternRewriter;
-using mlir::SmallString;
-using mlir::SmallVector;
 using mlir::StringRef;
-using mlir::success;
 using mlir::Type;
 using mlir::UnrankedMemRefType;
-using mlir::Value;
 
 namespace {
 
-/// Rewrites gpu.launch_func operation to be contained inside
-/// comp.schedule_func. Creates new execution environment before function,
-/// then allocates required memory on device. After scheduling function
-/// creates memory reads and wait for completion. Finally deallocates
-/// device memory and destroys execution environment.
-struct RewriteLaunchFunc : public mlir::OpRewritePattern<gpu::LaunchFuncOp> {
-  RewriteLaunchFunc(mlir::MLIRContext *context)
-      : mlir::OpRewritePattern<gpu::LaunchFuncOp>(context),
-        bufferType(vulkan::BufferType::get(context)) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(gpu::LaunchFuncOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-
-  mlir::LogicalResult
-  createScheduleFuncOp(mlir::PatternRewriter &rewriter, mlir::Location loc,
-                       gpu::LaunchFuncOp op,
-                       const mlir::ValueRange operands) const;
-
-private:
-  static llvm::DenseMap<::mlir::Value, ::mlir::Value> VulkanBufferMap;
-  vulkan::BufferType bufferType;
-};
-
-mlir::LogicalResult RewriteLaunchFunc::createScheduleFuncOp(
-    mlir::PatternRewriter &rewriter, mlir::Location loc, gpu::LaunchFuncOp op,
-    mlir::ValueRange operands) const {
-  // Find kernel that operation launches.
-  mlir::SymbolRefAttr kernelSymbol = op.kernel();
-  auto kernelOp = mlir::SymbolTable::lookupNearestSymbolFrom<gpu::GPUFuncOp>(
-      op.getOperation(), kernelSymbol);
-  if (!kernelOp)
-    return mlir::failure();
-
-  rewriter.setInsertionPoint(op);
-  auto CreateShaderModuleOp =
-      rewriter.create<vulkan::CreateShaderModuleOp>(loc, operands);
-
-  // Add launch_func with new operands inside schedule_func.
-  mlir::PatternRewriter::InsertionGuard insertionGuard(rewriter);
-  rewriter.createBlock(&CreateShaderModuleOp.body(),
-                       CreateShaderModuleOp.body().end());
-  rewriter.create<gpu::LaunchFuncOp>(
-      loc, kernelOp, op.getGridSizeOperandValues(),
-      op.getBlockSizeOperandValues(), op.getOperands());
-  return mlir::success();
-}
-
-mlir::LogicalResult
-RewriteLaunchFunc::matchAndRewrite(gpu::LaunchFuncOp op,
-                                   mlir::PatternRewriter &rewriter) const {
-  // organize pipeline for each gpu kernel.
-  mlir::Location loc = op.getLoc();
-  rewriter.setInsertionPoint(op);
-
-  std::vector<mlir::Value> deviceBuffers;
-  for (auto operand : op.getOperands()) {
-    if (operand.getType().isa<MemRefType>()) {
-      auto isBuildBuffer = VulkanBufferMap.find(operand);
-      // if don't build buffer, build one.
-      if (isBuildBuffer == VulkanBufferMap.end()) {
-        auto allocOp = rewriter.create<vulkan::Alloc>(loc, bufferType);
-        auto buffer = allocOp.getResult();
-        VulkanBufferMap[operand] = buffer;
-      }
-      deviceBuffers.push_back(VulkanBufferMap[operand]);
-    }
-  }
-
-  // wrapper the launch_func op with the build vkBuffer.
-  auto shaderOperands = mlir::ValueRange(deviceBuffers);
-  createScheduleFuncOp(rewriter, loc, op, shaderOperands);
-
-  //TODO CHECK all the store and load op, replace them with wirtebuffer and readbuffer.
-
-  // Remove original launch operation.
-  rewriter.eraseOp(op.getOperation());
-
-  return mlir::success();
-}
-
-/// Converts memrefs in gpu function signature to reside in memory
-/// spaces supported by execution environment.
-struct ConvertGpuFunc : public mlir::OpConversionPattern<gpu::GPUFuncOp> {
-  ConvertGpuFunc(mlir::MLIRContext *context)
-      : mlir::OpConversionPattern<gpu::GPUFuncOp>(context) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(gpu::GPUFuncOp op, mlir::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const override {
-    // main func insert vulkan ops;
-    // Vk_InitVulkanCall, Vk_SubmitCommandBuffers, Vk_DeinitVulkan
-    if (op.isKernel()) {
-      return mlir::failure();
-    }
-    mlir::Location loc = op.getLoc();
-    ::mlir::Block &block = op.body().front();
-    rewriter.setInsertionPointToStart(&block);
-    rewriter.create<vulkan::InitVulkanCall>(loc);
-    op.walk([&](gpu::ReturnOp op) {
-      rewriter.setInsertionPoint(op);
-      rewriter.create<vulkan::SubmitCommandBuffers>(loc);
-      rewriter.create<vulkan::DeinitVulkan>(loc);
-    });
-    return mlir::success();
-  }
-};
-
-/// A pass to convert gpu launch op to vulkan launch call op, by creating a
-/// SPIR-V binary shader from `spirv::ModuleOp` using `spirv::serialize`
-/// function and attaching binary data and entry point name as an attributes
-/// to created vulkan launch call op.
+/// A pass to convert gpu launch op to vulkan dialect ops. main operation is
+/// build vulkan pipeline, create device buffer for pipeline. reduce memory
+/// copy.
 class ConvertGpuToVulkan : public ConvertGpuToVulkanBase<ConvertGpuToVulkan> {
 public:
   void runOnOperation();
 
+  LogicalResult createInitVulkan(FuncOp op);
+
+  LogicalResult createDeInitVulkan(FuncOp op);
+
+  LogicalResult createSubmit(FuncOp op);
+
+  LogicalResult createVkBuffer(FuncOp op);
+
+  LogicalResult convertLaunchFucOp(FuncOp op);
+
+  LogicalResult updateVkBuffer(FuncOp op);
+
 private:
-  llvm::DenseMap<Value, llvm::SmallVector<uint64_t, 2>> bufferMap;
+  mlir::Value VkInstance;
+  llvm::DenseMap<mlir::Value, mlir::Value> VulkanBufferMap;
+  std::map<gpu::LaunchFuncOp, std::vector<mlir::Value>> opBufferMap;
 };
 
+LogicalResult ConvertGpuToVulkan::createInitVulkan(FuncOp op) {
+  OpBuilder builder(op.getContext());
+  // find insert point, func head.
+  mlir::Region &region = op.getOperation()->getRegion(0);
+  builder.setInsertionPointToStart(&region.front());
+
+  mlir::Location loc = op.getLoc();
+  auto Init = builder.create<vulkan::InitVulkan>(
+      loc, pmlc::dialect::vulkan::ShaderModuleType::get(op.getContext()));
+  VkInstance = Init.getResult();
+  return mlir::success();
+}
+
+LogicalResult ConvertGpuToVulkan::createSubmit(FuncOp op) {
+  OpBuilder builder(op.getContext());
+  mlir::Location loc = op.getLoc();
+
+  // find insert point, func head.
+  mlir::Region &region = op.getOperation()->getRegion(0);
+  builder.setInsertionPoint(&region.front().back());
+  builder.create<vulkan::SubmitCommandBuffers>(loc, VkInstance);
+  return mlir::success();
+}
+
+LogicalResult ConvertGpuToVulkan::createDeInitVulkan(FuncOp op) {
+  OpBuilder builder(op.getContext());
+  mlir::Location loc = op.getLoc();
+
+  // find insert point, func head.
+  mlir::Region &region = op.getOperation()->getRegion(0);
+  builder.setInsertionPoint(&region.front().back());
+  builder.create<vulkan::DeinitVulkan>(loc, VkInstance);
+  return mlir::success();
+}
+
+LogicalResult ConvertGpuToVulkan::createVkBuffer(FuncOp funcOp) {
+  auto ctx = funcOp.getContext();
+  OpBuilder builder(ctx);
+  mlir::Location loc = funcOp.getLoc();
+
+  funcOp.walk([&](gpu::LaunchFuncOp op) {
+    std::vector<mlir::Value> mapVkBuffer;
+    for (auto operand : op.getOperands()) {
+      if (operand.getType().isa<MemRefType>()) {
+        auto isBuildBuffer = VulkanBufferMap.find(operand);
+        // if don't build buffer, build one.
+        if (isBuildBuffer == VulkanBufferMap.end()) {
+          builder.setInsertionPoint(op.getOperation());
+          auto allocOp = builder.create<vulkan::Alloc>(
+              loc, pmlc::dialect::vulkan::BufferType::get(ctx), VkInstance);
+
+          auto buffer = allocOp.getResult();
+          VulkanBufferMap[operand] = buffer;
+        }
+        mapVkBuffer.push_back(VulkanBufferMap[operand]);
+      }
+    }
+    opBufferMap[op] = mapVkBuffer;
+  });
+  return mlir::success();
+}
+
+LogicalResult ConvertGpuToVulkan::convertLaunchFucOp(FuncOp op) {
+  auto ctx = op.getContext();
+  OpBuilder builder(ctx);
+  mlir::Location loc = op.getLoc();
+
+  op.walk([&](gpu::LaunchFuncOp launchFuncOp) {
+    builder.setInsertionPoint(launchFuncOp);
+    std::vector<mlir::Value> &v = opBufferMap[launchFuncOp];
+    auto shaderModule = builder.create<vulkan::CreateShaderModuleOp>(
+        loc, VkInstance, ArrayRef<mlir::Value>(v));
+
+    // Add launch_func with new operands inside schedule_func.
+    mlir::OpBuilder::InsertionGuard insertionGuard(builder);
+    builder.createBlock(&shaderModule.body(), shaderModule.body().end());
+
+    // Find kernel that operation launches.
+    mlir::SymbolRefAttr kernelSymbol = launchFuncOp.kernel();
+    auto kernelOp = mlir::SymbolTable::lookupNearestSymbolFrom<gpu::GPUFuncOp>(
+        launchFuncOp.getOperation(), kernelSymbol);
+    builder.create<gpu::LaunchFuncOp>(
+        loc, kernelOp, launchFuncOp.getGridSizeOperandValues(),
+        launchFuncOp.getBlockSizeOperandValues(), launchFuncOp.getOperands());
+
+    launchFuncOp.erase();
+  });
+  return mlir::success();
+}
+
+LogicalResult ConvertGpuToVulkan::updateVkBuffer(FuncOp funcOp) {
+  auto ctx = funcOp.getContext();
+  OpBuilder builder(ctx);
+  mlir::Location loc = funcOp.getLoc();
+
+  funcOp.walk([&](mlir::Operation *op) {
+    if (mlir::dyn_cast<mlir::LoadOp>(op)) {
+      for (auto operand : op->getOperands()) {
+        auto operandType = operand.getType();
+        if (operandType.isa<MemRefType>()){
+          auto isBuildBuffer = VulkanBufferMap.find(operand);
+          if (isBuildBuffer != VulkanBufferMap.end()) {
+            builder.setInsertionPoint(op);
+            auto newOp = builder.create<vulkan::ReadFromDevice>(
+                loc, operandType, VulkanBufferMap[operand], VkInstance);
+            auto newOperand = newOp.getResult();
+            op->setOperand(1, newOperand);
+          }
+        }
+      }
+    }
+    if (mlir::dyn_cast<mlir::StoreOp>(op)) {
+      for (auto operand : op->getOperands()) {
+        auto operandType = operand.getType();
+        if (operandType.isa<MemRefType>()){
+          auto isBuildBuffer = VulkanBufferMap.find(operand);
+          if (isBuildBuffer != VulkanBufferMap.end()) {
+            builder.setInsertionPointAfter(op);
+            builder.create<vulkan::WriteToDevice>(
+                loc, vulkan::BufferType::get(ctx), VulkanBufferMap[operand],
+                VkInstance);
+          }
+        }
+      }
+    }
+  });
+  return mlir::success();
+}
+
 void ConvertGpuToVulkan::runOnOperation() {
-  mlir::ConversionTarget target(getContext());
-  target.addLegalDialect<vulkan::VkDialect>();
-  target.addLegalDialect<gpu::GPUDialect>();
-  //  target.addLegalDialect<::mlir::spirv::SPIRVDialect>();
-  target.addIllegalOp<gpu::LaunchOp>();
-  target.addIllegalOp<gpu::LaunchFuncOp>();
-  target.addDynamicallyLegalOp<gpu::GPUFuncOp>(
-      [&](gpu::GPUFuncOp op) -> bool { return op.isKernel(); });
-
-  // Setup rewrite patterns.
-  mlir::OwningRewritePatternList patterns;
-  populateGpuToVulkanPatterns(&getContext(), patterns);
-
-  // Run the conversion.
-  if (mlir::failed(
-          mlir::applyPartialConversion(getOperation(), target, patterns)))
-    signalPassFailure();
+  // may have multi funcOp
+  for (auto funcOp : getOperation().getOps<mlir::FuncOp>()) {
+    if (mlir::failed(createInitVulkan(funcOp))) {
+      return signalPassFailure();
+    }
+    if (mlir::failed(createSubmit(funcOp))) {
+      return signalPassFailure();
+    }
+    if (mlir::failed(createDeInitVulkan(funcOp))) {
+      return signalPassFailure();
+    }
+    if (mlir::failed(createVkBuffer(funcOp))) {
+      return signalPassFailure();
+    }
+    if (mlir::failed(convertLaunchFucOp(funcOp))) {
+      return signalPassFailure();
+    }
+    if (mlir::failed(updateVkBuffer(funcOp))) {
+      return signalPassFailure();
+    }
+  }
 }
 
 } // namespace
-
-void populateGpuToVulkanPatterns(mlir::MLIRContext *context,
-                                 mlir::OwningRewritePatternList &patterns) {
-  patterns.insert<ConvertGpuFunc>(context);
-  patterns.insert<RewriteLaunchFunc>(context);
-}
 
 std::unique_ptr<mlir::Pass> createConvertGpuToVulkanPass() {
   return std::make_unique<ConvertGpuToVulkan>();

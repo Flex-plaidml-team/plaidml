@@ -22,14 +22,14 @@ class Vk_Op<string mnemonic, list<OpTrait> traits = []> :
 }
 
 def Vk_CreateShaderModuleOp : Vk_Op<"create_shader_module">,
-                              Arguments<(ins Variadic<VkBuffer>:$operands,
-                                             VkShaderModule:$VulkanInvocation)>{
+                              Arguments<(ins VkShaderModule:$VulkanInvocation,
+                              Variadic<AnyType>:$operands)>{
   let summary = "new Module with local buffer ";
   let regions = (region AnyRegion:$body);
 }
 
 def Vk_Alloc : Vk_Op<"alloc">
-               // Arguments<(ins VkShaderModule:$VulkanInvocation)>
+               , Arguments<(ins VkShaderModule:$VulkanInvocation)>
                 {
   let results = (outs VkBuffer);
 }
