@@ -13,6 +13,8 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 
@@ -26,18 +28,23 @@ namespace pmlc::conversion::gpu {
 namespace gpu = mlir::gpu;
 namespace spirv = mlir::spirv;
 namespace LLVM = mlir::LLVM;
+using mlir::AllocOp;
 using mlir::ArrayRef;
-using mlir::CallOp;
+using mlir::BlockArgument;
 using mlir::failure;
-using mlir::FuncOp;
 using mlir::FunctionType;
+using mlir::LoadOp;
 using mlir::Location;
 using mlir::LogicalResult;
+using mlir::MemRefCastOp;
 using mlir::MemRefType;
 using mlir::ModuleOp;
 using mlir::OpBuilder;
+using mlir::Operation;
+using mlir::OpOperand;
 using mlir::SmallString;
 using mlir::SmallVector;
+using mlir::StoreOp;
 using mlir::StringRef;
 using mlir::success;
 using mlir::Type;
@@ -46,6 +53,8 @@ using mlir::Value;
 
 static constexpr const char *kSPIRVBinary = "SPIRV_BIN";
 static constexpr const char *kPrint_memref_f32 = "print_memref_f32";
+static constexpr const char *kHostTimer = "hostTimer";
+static constexpr const char *kGetHostExecTime = "getHostExecTime";
 static constexpr const char *kInitVulkan = "initVulkan";
 static constexpr const char *kDeinitVulkan = "deinitVulkan";
 static constexpr const char *kRun = "run";
@@ -57,6 +66,8 @@ static constexpr const char *kCreateVulkanMemoryTransferAction =
     "createVulkanMemoryTransferAction";
 static constexpr const char *kAddVulkanLaunchActionToSchedule =
     "addVulkanLaunchActionToSchedule";
+
+static constexpr const char *kBindAllBuffers = "bindAllBuffers";
 
 static constexpr const char *kBindBufferBFloat16 = "bindBufferBFloat16";
 static constexpr const char *kBindBufferFloat16 = "bindBufferFloat16";
@@ -71,6 +82,9 @@ static constexpr const char *kBindBufferInteger32 = "bindBufferInteger32";
 static constexpr const char *kBindBufferInteger64 = "bindBufferInteger64";
 
 static constexpr const int kByteBits = 8;
+static constexpr const int kBufferCopyModeInit = 0;
+static constexpr const int kBufferCopyModeHostToDevice = 1 << 0;
+static constexpr const int kBufferCopyModeDeviceToHost = 1 << 1;
 
 /// A pass to convert gpu launch op to vulkan launch call op, by creating a
 /// SPIR-V binary shader from `spirv::ModuleOp` using `spirv::serialize`
@@ -93,8 +107,7 @@ private:
                                      Location loc, OpBuilder &builder);
 
   /// bind gpu.launchOp buffers to Vulkan runtime.
-  LogicalResult bindBuffers(Location loc, OpBuilder &builder,
-                            gpu::LaunchFuncOp launchOp);
+  LogicalResult bindBuffers(mlir::CallOp &callOp);
 
   /// Check and transfer VkBuffers when necessary.
   LogicalResult transferBuffers(Location loc, OpBuilder &builder,
@@ -103,11 +116,27 @@ private:
   /// Print a single buffer.
   LogicalResult printBuffer(Location loc, OpBuilder &builder, Value &buffer);
 
+  mlir::LLVM::CallOp createTimer(Location loc, OpBuilder builder);
+
+  void hostExecutionTime(Location loc, OpBuilder builder,
+                         mlir::LLVM::CallOp &timerBefore,
+                         mlir::LLVM::CallOp &timerAfter);
+
+  void hostExecutionTimeTillNow(Location loc, OpBuilder builder,
+                                mlir::LLVM::CallOp &timerBefore);
+
   /// Converts the given `luanchOp` to vulkan launch call.
   void convertGpuLaunchFunc(gpu::LaunchFuncOp launchOp);
 
   /// Declares all needed runtime functions.
   void declareVulkanFunctions(Location loc);
+
+  /// Check buffer type and only copy from/to device when necessary
+  uint32_t getBufferCopyMode(mlir::CallOp &callOp, Value &buffer);
+
+  bool isExternalOperation(Operation *op);
+
+  llvm::SmallSet<Operation *, 4> getExternalDependentOperations(Value &value);
 
   void getCachedTypes() {
     llvmVoidType = LLVM::LLVMType::getVoidTy(&getContext());
@@ -116,7 +145,6 @@ private:
     llvmInt64Type = LLVM::LLVMType::getInt64Ty(&getContext());
 
     OpBuilder builder(getOperation());
-    mlirIndexType = builder.getIndexType();
     mlirFloat32Type = builder.getF32Type();
   }
 
@@ -158,7 +186,6 @@ private:
   LLVM::LLVMType getLLVMInt64Type() { return llvmInt64Type; }
 
   mlir::Type getMLIRFloat32Type() { return mlirFloat32Type; }
-  mlir::Type getMLIRIndexType() { return mlirIndexType; }
 
   LLVM::LLVMType llvmVoidType;
   LLVM::LLVMType llvmPointerType;
@@ -166,11 +193,11 @@ private:
   LLVM::LLVMType llvmInt64Type;
 
   mlir::Type mlirFloat32Type;
-  mlir::Type mlirIndexType;
 
   uint64_t numKernel = 0;
   uint64_t lauchFuncIndex = 0;
   mlir::Value vulkanRuntime;
+  LLVM::CallOp deinitVulkan;
   llvm::DenseMap<Value, llvm::SmallVector<uint64_t, 2>> bufferMap;
 
   struct mlirTypeComparator {
@@ -181,7 +208,7 @@ private:
   };
 
   llvm::SmallSet<mlir::Type, 4, mlirTypeComparator> bufferElementTypes;
-  llvm::SmallSet<const char *, 4> optionalSymbols;
+  llvm::SmallSet<StringRef, 4> optionalSymbols;
 };
 
 void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
@@ -193,9 +220,6 @@ void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
   getOperation().walk(
       [this](gpu::LaunchFuncOp op) { convertGpuLaunchFunc(op); });
 
-  // Declare runtime functions.
-  declareVulkanFunctions(loc);
-
   // Erase `gpu::GPUModuleOp` and `spirv::Module` operations.
   for (auto gpuModule :
        llvm::make_early_inc_range(getOperation().getOps<gpu::GPUModuleOp>()))
@@ -204,6 +228,19 @@ void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
   for (auto spirvModule :
        llvm::make_early_inc_range(getOperation().getOps<spirv::ModuleOp>()))
     spirvModule.erase();
+
+  for (auto funcOp : getOperation().getOps<mlir::FuncOp>()) {
+    funcOp.walk([this](mlir::CallOp callOp) {
+      if (callOp.callee() == kBindAllBuffers) {
+        bindBuffers(callOp);
+        callOp.erase();
+      }
+    });
+  }
+  getOperation().dump();
+
+  // Declare runtime functions.
+  declareVulkanFunctions(loc);
 }
 
 LogicalResult ConvertGpuLaunchFuncToVulkanCalls::createBinaryShader(
@@ -237,10 +274,88 @@ Value ConvertGpuLaunchFuncToVulkanCalls::createEntryPointNameConstant(
                                   shaderName, LLVM::Linkage::Internal);
 }
 
+llvm::SmallSet<Operation *, 4>
+ConvertGpuLaunchFuncToVulkanCalls::getExternalDependentOperations(
+    Value &value) {
+  llvm::SmallSet<Operation *, 4> operations;
+  llvm::SetVector<OpOperand *> uses;
+
+  operations.insert(value.getDefiningOp());
+  for (auto &use : value.getUses()) {
+    uses.insert(&use);
+  }
+  while (!uses.empty()) {
+    auto owner = uses.back()->getOwner();
+    operations.insert(owner);
+    uses.pop_back();
+    for (auto opResult : owner->getOpResults()) {
+      for (auto &use : opResult.getUses()) {
+        uses.insert(&use);
+      }
+    }
+  }
+
+  for (auto operation : operations) {
+    if (!isExternalOperation(operation)) {
+      operations.erase(operation);
+    }
+  }
+  return operations;
+}
+
+bool ConvertGpuLaunchFuncToVulkanCalls::isExternalOperation(Operation *op) {
+  // Buffer related calls are all mlir::CallOp, does not need to check
+  // LLVM::CallOp
+  if (auto callOp = llvm::dyn_cast<mlir::CallOp>(op)) {
+    if (callOp.callee() == kBindAllBuffers ||
+        optionalSymbols.count(callOp.callee())) {
+      return false;
+    }
+    return true;
+  }
+
+  auto allocOp = llvm::dyn_cast<AllocOp>(op);
+  auto memRefCastOp = llvm::dyn_cast<MemRefCastOp>(op);
+  if (allocOp | memRefCastOp) {
+    return false;
+  }
+  return true;
+}
+
+uint32_t
+ConvertGpuLaunchFuncToVulkanCalls::getBufferCopyMode(mlir::CallOp &callOp,
+                                                     Value &buffer) {
+  uint32_t copyMode = kBufferCopyModeInit;
+  if (buffer.isa<BlockArgument>()) {
+    copyMode |= (kBufferCopyModeHostToDevice | kBufferCopyModeDeviceToHost);
+    return copyMode;
+  }
+
+  auto operationDeps = getExternalDependentOperations(buffer);
+  auto currentBlock = callOp.getOperation()->getBlock();
+  for (auto op : operationDeps) {
+    if (op->getBlock() == currentBlock) {
+      if (op->isBeforeInBlock(callOp.getOperation())) {
+        copyMode |= kBufferCopyModeHostToDevice;
+      } else if (deinitVulkan.getOperation()->isBeforeInBlock(op)) {
+        copyMode |= kBufferCopyModeDeviceToHost;
+      } else {
+        callOp.emitWarning("A host side buffer is used after copied to "
+                           "device and before device returns.");
+      }
+    } else {
+      copyMode |= (kBufferCopyModeHostToDevice | kBufferCopyModeDeviceToHost);
+    }
+  }
+  return copyMode;
+}
+
 LogicalResult
-ConvertGpuLaunchFuncToVulkanCalls::bindBuffers(Location loc, OpBuilder &builder,
-                                               gpu::LaunchFuncOp launchOp) {
-  auto buffers = launchOp.operands();
+ConvertGpuLaunchFuncToVulkanCalls::bindBuffers(mlir::CallOp &callOp) {
+  OpBuilder builder(callOp);
+  Location loc = callOp.getLoc();
+  auto buffers = callOp.operands();
+
   // Create LLVM constant for the descriptor set index.
   // Bind all memrefs to the `0` descriptor set, the same way as `GPUToSPIRV`
   // pass does.
@@ -258,22 +373,24 @@ ConvertGpuLaunchFuncToVulkanCalls::bindBuffers(Location loc, OpBuilder &builder,
       for (auto dim : shape) {
         numElement *= dim;
       }
-
       auto elementType = memRefType.getElementType();
       bufferElementTypes.insert(elementType);
       uint32_t elementTypeSize =
           llvm::divideCeil(elementType.getIntOrFloatBitWidth(), kByteBits);
-
       Value bufferByteSize = builder.create<LLVM::ConstantOp>(
           loc, getLLVMInt32Type(),
           builder.getI32IntegerAttr(numElement * elementTypeSize));
-      Value unrankedBuffer = builder.create<mlir::MemRefCastOp>(
+      Value unrankedBuffer = builder.create<MemRefCastOp>(
           loc, buffer, getUnrankedMemRefType(elementType));
-      builder.create<CallOp>(
+      Value bufferCopyMode = builder.create<LLVM::ConstantOp>(
+          loc, getLLVMInt32Type(),
+          builder.getI32IntegerAttr(getBufferCopyMode(callOp, buffer)));
+
+      builder.create<mlir::CallOp>(
           loc, ArrayRef<Type>{},
           builder.getSymbolRefAttr(getBufferBindingFunc(elementType)),
           ArrayRef<Value>{vulkanRuntime, descriptorSet, descriptorBinding,
-                          bufferByteSize, unrankedBuffer});
+                          bufferByteSize, bufferCopyMode, unrankedBuffer});
       optionalSymbols.insert(getBufferBindingFunc(elementType));
     } else {
       return failure();
@@ -319,15 +436,41 @@ LogicalResult ConvertGpuLaunchFuncToVulkanCalls::printBuffer(Location loc,
   if (auto memRefType = type.dyn_cast_or_null<MemRefType>()) {
     auto elementType = memRefType.getElementType();
     if (elementType.isF32()) {
-      auto unrankedBuffer = builder.create<mlir::MemRefCastOp>(
+      auto unrankedBuffer = builder.create<MemRefCastOp>(
           loc, buffer, getUnrankedMemRefType(elementType));
-      builder.create<CallOp>(loc, ArrayRef<Type>{},
-                             builder.getSymbolRefAttr(kPrint_memref_f32),
-                             ArrayRef<Value>(unrankedBuffer));
+      builder.create<mlir::CallOp>(loc, ArrayRef<Type>{},
+                                   builder.getSymbolRefAttr(kPrint_memref_f32),
+                                   ArrayRef<Value>(unrankedBuffer));
       optionalSymbols.insert(kPrint_memref_f32);
     }
   }
   return success();
+}
+
+mlir::LLVM::CallOp
+ConvertGpuLaunchFuncToVulkanCalls::createTimer(Location loc,
+                                               OpBuilder builder) {
+  auto timer = builder.create<LLVM::CallOp>(
+      loc, ArrayRef<Type>{getLLVMPointerType()},
+      builder.getSymbolRefAttr(kHostTimer), ArrayRef<Value>{});
+
+  return timer;
+}
+
+void ConvertGpuLaunchFuncToVulkanCalls::hostExecutionTime(
+    Location loc, OpBuilder builder, mlir::LLVM::CallOp &timerBefore,
+    mlir::LLVM::CallOp &timerAfter) {
+  timerAfter = createTimer(loc, builder);
+
+  builder.create<LLVM::CallOp>(
+      loc, ArrayRef<Type>{}, builder.getSymbolRefAttr(kGetHostExecTime),
+      ArrayRef<Value>{timerBefore.getResult(0), timerAfter.getResult(0)});
+}
+
+void ConvertGpuLaunchFuncToVulkanCalls::hostExecutionTimeTillNow(
+    Location loc, OpBuilder builder, mlir::LLVM::CallOp &timerBefore) {
+  mlir::LLVM::CallOp timerAfter;
+  hostExecutionTime(loc, builder, timerBefore, timerAfter);
 }
 
 void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
@@ -336,19 +479,29 @@ void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
   OpBuilder builder(module.getBody()->getTerminator());
 
   builder.create<LLVM::LLVMFuncOp>(
+      loc, kHostTimer,
+      LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kGetHostExecTime,
+      LLVM::LLVMType::getFunctionTy(
+          getLLVMVoidType(), {getLLVMPointerType(), getLLVMPointerType()},
+          /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
       loc, kInitVulkan,
       LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
                                     /*isVarArg=*/false));
 
-  builder.create<FuncOp>(
+  builder.create<LLVM::LLVMFuncOp>(
       loc, kCreateVulkanLaunchKernelAction,
-      FunctionType::get(
-          {ArrayRef<Type>{getLLVMPointerType(), getLLVMPointerType(),
-                          getLLVMInt32Type(), getLLVMPointerType(),
-                          getMLIRIndexType(), getMLIRIndexType(),
-                          getMLIRIndexType()}},
-          {}, &ctx),
-      ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(),
+                                    {getLLVMPointerType(), getLLVMPointerType(),
+                                     getLLVMInt32Type(), getLLVMPointerType(),
+                                     getLLVMInt32Type(), getLLVMInt32Type(),
+                                     getLLVMInt32Type()},
+                                    /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kSetVulkanLaunchKernelAction,
@@ -372,7 +525,7 @@ void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
                                     /*isVarArg=*/false));
 
   if (optionalSymbols.count(kPrint_memref_f32)) {
-    builder.create<FuncOp>(
+    builder.create<mlir::FuncOp>(
         loc, kPrint_memref_f32,
         FunctionType::get(
             {ArrayRef<Type>{getUnrankedMemRefType(getMLIRFloat32Type())}}, {},
@@ -393,11 +546,12 @@ void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
   for (auto bufferElementType : bufferElementTypes) {
     auto func = getBufferBindingFunc(bufferElementType);
     if (optionalSymbols.count(func)) {
-      builder.create<FuncOp>(
+      builder.create<mlir::FuncOp>(
           loc, func,
           FunctionType::get(
               {ArrayRef<Type>{getLLVMPointerType(), getLLVMInt32Type(),
                               getLLVMInt32Type(), getLLVMInt32Type(),
+                              getLLVMInt32Type(),
                               getUnrankedMemRefType(bufferElementType)}},
               {}, &ctx),
           ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
@@ -439,19 +593,25 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
   Value entryPointName = createEntryPointNameConstant(
       launchOp.getKernelName(), lauchFuncIndex, loc, builder);
 
-  auto gridSize = launchOp.getGridSizeOperandValues();
+  auto gSize = launchOp.getGridSizeOperandValues();
+  auto x = gSize.x.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  auto y = gSize.y.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  auto z = gSize.z.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  Value gx = builder.create<LLVM::ConstantOp>(loc, getLLVMInt32Type(), x);
+  Value gy = builder.create<LLVM::ConstantOp>(loc, getLLVMInt32Type(), y);
+  Value gz = builder.create<LLVM::ConstantOp>(loc, getLLVMInt32Type(), z);
 
   // Create createVulkanLaunchKernelAction.
-  builder.create<CallOp>(
+  builder.create<LLVM::CallOp>(
       loc, ArrayRef<Type>{},
       builder.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
       ArrayRef<Value>{vulkanRuntime, ptrToSPIRVBinary, binarySize,
-                      entryPointName, gridSize.x, gridSize.y, gridSize.z});
+                      entryPointName, gx, gy, gz});
 
   /// bind gpu.launchOp buffers to Vulkan runtime.
-  if (failed(bindBuffers(loc, builder, launchOp))) {
-    return signalPassFailure();
-  }
+  builder.create<mlir::CallOp>(loc, ArrayRef<Type>{},
+                               builder.getSymbolRefAttr(kBindAllBuffers),
+                               launchOp.operands());
 
   // Presume block.x is the subgroup size
   auto blockSize = launchOp.getBlockSizeOperandValues();
@@ -487,13 +647,27 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
   // Create call to 'run' and 'deinitVulkan' runtime function
   // after the last GpuLauchFunc.
   if (lauchFuncIndex == numKernel - 1) {
+    mlir::LLVM::CallOp timerBefore, timerMid, timerAfter, timerLast;
+    timerBefore = createTimer(loc, builder);
+
+    // Move this timer to the beginning to calculate from the start.
+    auto *parentBlock = timerBefore.getOperation()->getBlock();
+    timerBefore.getOperation()->moveBefore(&parentBlock->front());
+
+    hostExecutionTime(loc, builder, timerBefore, timerMid);
+
     builder.create<LLVM::CallOp>(loc, ArrayRef<Type>{},
                                  builder.getSymbolRefAttr(kRun),
                                  ArrayRef<Value>{vulkanRuntime});
 
-    builder.create<LLVM::CallOp>(loc, ArrayRef<Type>{},
-                                 builder.getSymbolRefAttr(kDeinitVulkan),
-                                 ArrayRef<Value>{vulkanRuntime});
+    hostExecutionTime(loc, builder, timerMid, timerAfter);
+
+    deinitVulkan = builder.create<LLVM::CallOp>(
+        loc, ArrayRef<Type>{}, builder.getSymbolRefAttr(kDeinitVulkan),
+        ArrayRef<Value>{vulkanRuntime});
+
+    hostExecutionTime(loc, builder, timerAfter, timerLast);
+
   }
 
   // Print buffers
