@@ -53,6 +53,8 @@ using mlir::Value;
 
 static constexpr const char *kSPIRVBinary = "SPIRV_BIN";
 static constexpr const char *kPrint_memref_f32 = "print_memref_f32";
+static constexpr const char *kHostTimer = "hostTimer";
+static constexpr const char *kGetHostExecTime = "getHostExecTime";
 static constexpr const char *kInitVulkan = "initVulkan";
 static constexpr const char *kDeinitVulkan = "deinitVulkan";
 static constexpr const char *kRun = "run";
@@ -113,6 +115,15 @@ private:
 
   /// Print a single buffer.
   LogicalResult printBuffer(Location loc, OpBuilder &builder, Value &buffer);
+
+  mlir::LLVM::CallOp createTimer(Location loc, OpBuilder builder);
+
+  void hostExecutionTime(Location loc, OpBuilder builder,
+                         mlir::LLVM::CallOp &timerBefore,
+                         mlir::LLVM::CallOp &timerAfter);
+
+  void hostExecutionTimeTillNow(Location loc, OpBuilder builder,
+                                mlir::LLVM::CallOp &timerBefore);
 
   /// Converts the given `luanchOp` to vulkan launch call.
   void convertGpuLaunchFunc(gpu::LaunchFuncOp launchOp);
@@ -226,6 +237,7 @@ void ConvertGpuLaunchFuncToVulkanCalls::runOnOperation() {
       }
     });
   }
+  getOperation().dump();
 
   // Declare runtime functions.
   declareVulkanFunctions(loc);
@@ -435,10 +447,47 @@ LogicalResult ConvertGpuLaunchFuncToVulkanCalls::printBuffer(Location loc,
   return success();
 }
 
+mlir::LLVM::CallOp
+ConvertGpuLaunchFuncToVulkanCalls::createTimer(Location loc,
+                                               OpBuilder builder) {
+  auto timer = builder.create<LLVM::CallOp>(
+      loc, ArrayRef<Type>{getLLVMPointerType()},
+      builder.getSymbolRefAttr(kHostTimer), ArrayRef<Value>{});
+
+  return timer;
+}
+
+void ConvertGpuLaunchFuncToVulkanCalls::hostExecutionTime(
+    Location loc, OpBuilder builder, mlir::LLVM::CallOp &timerBefore,
+    mlir::LLVM::CallOp &timerAfter) {
+  timerAfter = createTimer(loc, builder);
+
+  builder.create<LLVM::CallOp>(
+      loc, ArrayRef<Type>{}, builder.getSymbolRefAttr(kGetHostExecTime),
+      ArrayRef<Value>{timerBefore.getResult(0), timerAfter.getResult(0)});
+}
+
+void ConvertGpuLaunchFuncToVulkanCalls::hostExecutionTimeTillNow(
+    Location loc, OpBuilder builder, mlir::LLVM::CallOp &timerBefore) {
+  mlir::LLVM::CallOp timerAfter;
+  hostExecutionTime(loc, builder, timerBefore, timerAfter);
+}
+
 void ConvertGpuLaunchFuncToVulkanCalls::declareVulkanFunctions(Location loc) {
   auto &ctx = getContext();
   ModuleOp module = getOperation();
   OpBuilder builder(module.getBody()->getTerminator());
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kHostTimer,
+      LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kGetHostExecTime,
+      LLVM::LLVMType::getFunctionTy(
+          getLLVMVoidType(), {getLLVMPointerType(), getLLVMPointerType()},
+          /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kInitVulkan,
@@ -598,13 +647,27 @@ void ConvertGpuLaunchFuncToVulkanCalls::convertGpuLaunchFunc(
   // Create call to 'run' and 'deinitVulkan' runtime function
   // after the last GpuLauchFunc.
   if (lauchFuncIndex == numKernel - 1) {
+    mlir::LLVM::CallOp timerBefore, timerMid, timerAfter, timerLast;
+    timerBefore = createTimer(loc, builder);
+
+    // Move this timer to the beginning to calculate from the start.
+    auto *parentBlock = timerBefore.getOperation()->getBlock();
+    timerBefore.getOperation()->moveBefore(&parentBlock->front());
+
+    hostExecutionTime(loc, builder, timerBefore, timerMid);
+
     builder.create<LLVM::CallOp>(loc, ArrayRef<Type>{},
                                  builder.getSymbolRefAttr(kRun),
                                  ArrayRef<Value>{vulkanRuntime});
 
+    hostExecutionTime(loc, builder, timerMid, timerAfter);
+
     deinitVulkan = builder.create<LLVM::CallOp>(
         loc, ArrayRef<Type>{}, builder.getSymbolRefAttr(kDeinitVulkan),
         ArrayRef<Value>{vulkanRuntime});
+
+    hostExecutionTime(loc, builder, timerAfter, timerLast);
+
   }
 
   // Print buffers
