@@ -22,46 +22,50 @@ class Vk_Op<string mnemonic, list<OpTrait> traits = []> :
 }
 
 def Vk_CreateShaderModuleOp : Vk_Op<"create_shader_module">,
-                              Arguments<(ins Variadic<VkBuffer>:$operands)>{
+                              Arguments<(ins Variadic<VkBuffer>:$operands,
+                                             VkShaderModule:$VulkanInvocation)>{
   let summary = "new Module with local buffer ";
   let regions = (region AnyRegion:$body);
-//  let results = (outs VkShaderModule:$module);
 }
 
-def Vk_Alloc : Vk_Op<"alloc"> {
+def Vk_Alloc : Vk_Op<"alloc">
+               // Arguments<(ins VkShaderModule:$VulkanInvocation)>
+                {
   let results = (outs VkBuffer);
 }
 
 def Vk_ReadFromDevice : Vk_Op<"Vk_ReadFromDevice">
-                       , Arguments<(ins VkBuffer:$deviceBuffer)>
+                       , Arguments<(ins VkBuffer:$deviceBuffer,
+                                        VkShaderModule:$VulkanInvocation)>
                        , Results<(outs AnyMemRef:$hostBuffer)> {
   let summary = "Schedules data copy from host for use in execution environment.";
 }
 
 def Vk_WriteToDevice : Vk_Op<"Vk_WriteToDevice">
-                      , Arguments<(ins AnyMemRef:$hostBuffer)>
+                      , Arguments<(ins AnyMemRef:$hostBuffer,
+                                       VkShaderModule:$VulkanInvocation)>
                       , Results<(outs VkBuffer:$deviceBuffer)> {
   let summary = "Schedules data copy from execution environment for use on host.";
 }
 
-def Vk_Wait : Vk_Op<"wait"> {
-  let summary = "Waits for events to finish.";
-
-  let description = [{
-    After this operation executes it is guaranteed that operations connected to
-    events have finished, and it is save to use their results from host.
-  }];
-}
-
-def Vk_InitVulkanCall : Vk_Op<"initvulkancall"> {
+def Vk_InitVulkan : Vk_Op<"initvulkan">
+                        , Results<(outs VkShaderModule:$VulkanInvocation)>{
    let summary = "init vulkan device and command buffer";
+   let description = [{
+     After this operation executes it is guaranteed that operations connected to
+     events have finished, and it is save to use their results from host.
+   }];
 }
 
-def Vk_DeinitVulkan : Vk_Op<"DeinitVulkan"> {
+def Vk_DeinitVulkan : Vk_Op<"DeinitVulkan">
+                     , Arguments<(ins VkShaderModule:$VulkanInvocation)>
+                     {
    let summary = "deinit vulkan device and command buffer";
 }
 
-def Vk_SubmitCommandBuffers : Vk_Op<"SubmitCommandBuffers"> {
+def Vk_SubmitCommandBuffers : Vk_Op<"SubmitCommandBuffers">
+                             , Arguments<(ins VkShaderModule:$VulkanInvocation)>
+                             {
    let summary = "submit command buffer";
 }
 
