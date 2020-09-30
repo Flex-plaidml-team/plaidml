@@ -84,156 +84,155 @@ class ConvertVulkanTollvm
 public:
   void runOnOperation();
   /// Declares all needed runtime functions.
-  //  void declareVulkanFunctions(mlir::Location loc);
-  //
-  //  void getCachedTypes() {
-  //    llvmVoidType = LLVM::LLVMType::getVoidTy(&getContext());
-  //    llvmPointerType = LLVM::LLVMType::getInt8PtrTy(&getContext());
-  //    llvmInt32Type = LLVM::LLVMType::getInt32Ty(&getContext());
-  //    llvmInt64Type = LLVM::LLVMType::getInt64Ty(&getContext());
-  //
-  //    OpBuilder builder(getOperation());
-  //    mlirIndexType = builder.getIndexType();
-  //    mlirFloat32Type = builder.getF32Type();
-  //  }
-  //
-  //  mlir::Type getUnrankedMemRefType(Type elementType) {
-  //    return UnrankedMemRefType::get(elementType, /*memorySpace=*/0);
-  //  }
-  //
-  //  const char *getBufferBindingFunc(Type elementType) {
-  //    if (elementType.isInteger(8)) {
-  //      return kBindBufferInteger8;
-  //    }
-  //    if (elementType.isInteger(16)) {
-  //      return kBindBufferInteger16;
-  //    }
-  //    if (elementType.isInteger(32)) {
-  //      return kBindBufferInteger32;
-  //    }
-  //    if (elementType.isInteger(64)) {
-  //      return kBindBufferInteger64;
-  //    }
-  //    if (elementType.isBF16()) {
-  //      return kBindBufferBFloat16;
-  //    }
-  //    if (elementType.isF16()) {
-  //      return kBindBufferFloat16;
-  //    }
-  //    if (elementType.isF32()) {
-  //      return kBindBufferFloat32;
-  //    }
-  //    if (elementType.isF64()) {
-  //      return kBindBufferFloat64;
-  //    }
-  //    return nullptr;
-  //  }
-  //
-  //  LLVM::LLVMType getLLVMVoidType() { return llvmVoidType; }
-  //  LLVM::LLVMType getLLVMPointerType() { return llvmPointerType; }
-  //  LLVM::LLVMType getLLVMInt32Type() { return llvmInt32Type; }
-  //  LLVM::LLVMType getLLVMInt64Type() { return llvmInt64Type; }
-  //
-  //  mlir::Type getMLIRFloat32Type() { return mlirFloat32Type; }
-  //  mlir::Type getMLIRIndexType() { return mlirIndexType; }
-  //
-  //  LLVM::LLVMType llvmVoidType;
-  //  LLVM::LLVMType llvmPointerType;
-  //  LLVM::LLVMType llvmInt32Type;
-  //  LLVM::LLVMType llvmInt64Type;
-  //
-  //  mlir::Type mlirFloat32Type;
-  //  mlir::Type mlirIndexType;
-  //
-  //  struct mlirTypeComparator {
-  //    bool operator()(mlir::Type x, mlir::Type y) const {
-  //      return x.getTypeID().getAsOpaquePointer() >
-  //             y.getTypeID().getAsOpaquePointer();
-  //    }
-  //  };
-  //
-  //  llvm::SmallSet<const char *, 4> optionalSymbols;
-  //  llvm::SmallSet<mlir::Type, 4, mlirTypeComparator> bufferElementTypes;
+  void declareVulkanFunctions(mlir::Location loc);
+
+  void getCachedTypes() {
+    llvmVoidType = LLVM::LLVMType::getVoidTy(&getContext());
+    llvmPointerType = LLVM::LLVMType::getInt8PtrTy(&getContext());
+    llvmInt32Type = LLVM::LLVMType::getInt32Ty(&getContext());
+    llvmInt64Type = LLVM::LLVMType::getInt64Ty(&getContext());
+
+    OpBuilder builder(getOperation());
+    mlirIndexType = builder.getIndexType();
+    mlirFloat32Type = builder.getF32Type();
+  }
+
+  mlir::Type getUnrankedMemRefType(Type elementType) {
+    return UnrankedMemRefType::get(elementType, /*memorySpace=*/0);
+  }
+
+  const char *getBufferBindingFunc(Type elementType) {
+    if (elementType.isInteger(8)) {
+      return kBindBufferInteger8;
+    }
+    if (elementType.isInteger(16)) {
+      return kBindBufferInteger16;
+    }
+    if (elementType.isInteger(32)) {
+      return kBindBufferInteger32;
+    }
+    if (elementType.isInteger(64)) {
+      return kBindBufferInteger64;
+    }
+    if (elementType.isBF16()) {
+      return kBindBufferBFloat16;
+    }
+    if (elementType.isF16()) {
+      return kBindBufferFloat16;
+    }
+    if (elementType.isF32()) {
+      return kBindBufferFloat32;
+    }
+    if (elementType.isF64()) {
+      return kBindBufferFloat64;
+    }
+    return nullptr;
+  }
+
+  LLVM::LLVMType getLLVMVoidType() { return llvmVoidType; }
+  LLVM::LLVMType getLLVMPointerType() { return llvmPointerType; }
+  LLVM::LLVMType getLLVMInt32Type() { return llvmInt32Type; }
+  LLVM::LLVMType getLLVMInt64Type() { return llvmInt64Type; }
+
+  LLVM::LLVMType llvmVoidType;
+  LLVM::LLVMType llvmPointerType;
+  LLVM::LLVMType llvmInt32Type;
+  LLVM::LLVMType llvmInt64Type;
+
+  mlir::Type getMLIRFloat32Type() { return mlirFloat32Type; }
+  mlir::Type getMLIRIndexType() { return mlirIndexType; }
+
+  mlir::Type mlirFloat32Type;
+  mlir::Type mlirIndexType;
+
+  struct mlirTypeComparator {
+    bool operator()(mlir::Type x, mlir::Type y) const {
+      return x.getTypeID().getAsOpaquePointer() >
+             y.getTypeID().getAsOpaquePointer();
+    }
+  };
+
+  llvm::SmallSet<const char *, 4> optionalSymbols;
+  llvm::SmallSet<mlir::Type, 4, mlirTypeComparator> bufferElementTypes;
 };
 
-// void ConvertVulkanTollvm::declareVulkanFunctions(mlir::Location loc) {
-//  auto &ctx = getContext();
-//  ModuleOp module = getOperation();
-//  OpBuilder builder(module.getBody()->getTerminator());
-//
-//  builder.create<LLVM::LLVMFuncOp>(
-//      loc, kInitVulkan,
-//      LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
-//                                    /*isVarArg=*/false));
-//
-//  builder.create<FuncOp>(
-//      loc, kCreateVulkanLaunchKernelAction,
-//      FunctionType::get(
-//          {ArrayRef<Type>{getLLVMPointerType(), getLLVMPointerType(),
-//                          getLLVMInt32Type(), getLLVMPointerType(),
-//                          getMLIRIndexType(), getMLIRIndexType(),
-//                          getMLIRIndexType()}},
-//          {}, &ctx),
-//      ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
-//
-//  builder.create<LLVM::LLVMFuncOp>(
-//      loc, kSetVulkanLaunchKernelAction,
-//      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(),
-//                                    {getLLVMPointerType(),
-//                                    getLLVMInt32Type()},
-//                                    /*isVarArg=*/false));
-//
-//  builder.create<LLVM::LLVMFuncOp>(
-//      loc, kAddVulkanLaunchActionToSchedule,
-//      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
-//                                    /*isVarArg=*/false));
-//
-//  builder.create<LLVM::LLVMFuncOp>(
-//      loc, kSubmitCommandBuffers,
-//      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
-//                                    /*isVarArg=*/false));
-//
-//  builder.create<LLVM::LLVMFuncOp>(
-//      loc, kDeinitVulkan,
-//      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
-//                                    /*isVarArg=*/false));
-//
-//  if (optionalSymbols.count(kPrint_memref_f32)) {
-//    builder.create<FuncOp>(
-//        loc, kPrint_memref_f32,
-//        FunctionType::get(
-//            {ArrayRef<Type>{getUnrankedMemRefType(getMLIRFloat32Type())}}, {},
-//            &ctx),
-//        ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
-//  }
-//
-//  if (optionalSymbols.count(kCreateVulkanMemoryTransferAction)) {
-//    builder.create<LLVM::LLVMFuncOp>(
-//        loc, kCreateVulkanMemoryTransferAction,
-//        LLVM::LLVMType::getFunctionTy(getLLVMVoidType(),
-//                                      {getLLVMPointerType(),
-//                                      getLLVMInt64Type(),
-//                                       getLLVMInt64Type(), getLLVMInt64Type(),
-//                                       getLLVMInt64Type()},
-//                                      /*isVarArg=*/false));
-//  }
-//
-//  for (auto bufferElementType : bufferElementTypes) {
-//    auto func = getBufferBindingFunc(bufferElementType);
-//    if (optionalSymbols.count(func)) {
-//      builder.create<FuncOp>(
-//          loc, func,
-//          FunctionType::get(
-//              {ArrayRef<Type>{getLLVMPointerType(), getLLVMInt32Type(),
-//                              getLLVMInt32Type(), getLLVMInt32Type(),
-//                              getUnrankedMemRefType(bufferElementType)}},
-//              {}, &ctx),
-//          ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
-//    }
-//  }
-//}
+void ConvertVulkanTollvm::declareVulkanFunctions(mlir::Location loc) {
+  auto &ctx = getContext();
+  ModuleOp module = getOperation();
+  OpBuilder builder(module.getBody()->getTerminator());
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kInitVulkan,
+      LLVM::LLVMType::getFunctionTy(getLLVMPointerType(), {},
+                                    /*isVarArg=*/false));
+
+  builder.create<FuncOp>(
+      loc, kCreateVulkanLaunchKernelAction,
+      FunctionType::get(
+          {ArrayRef<Type>{getLLVMPointerType(), getLLVMPointerType(),
+                          getLLVMInt32Type(), getLLVMPointerType(),
+                          getMLIRIndexType(), getMLIRIndexType(),
+                          getMLIRIndexType()}},
+          {}, &ctx),
+      ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kSetVulkanLaunchKernelAction,
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(),
+                                    {getLLVMPointerType(), getLLVMInt32Type()},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kAddVulkanLaunchActionToSchedule,
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kSubmitCommandBuffers,
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kDeinitVulkan,
+      LLVM::LLVMType::getFunctionTy(getLLVMVoidType(), {getLLVMPointerType()},
+                                    /*isVarArg=*/false));
+
+  if (optionalSymbols.count(kPrint_memref_f32)) {
+    builder.create<FuncOp>(
+        loc, kPrint_memref_f32,
+        FunctionType::get(
+            {ArrayRef<Type>{getUnrankedMemRefType(getMLIRFloat32Type())}}, {},
+            &ctx),
+        ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+  }
+
+  if (optionalSymbols.count(kCreateVulkanMemoryTransferAction)) {
+    builder.create<LLVM::LLVMFuncOp>(
+        loc, kCreateVulkanMemoryTransferAction,
+        LLVM::LLVMType::getFunctionTy(getLLVMVoidType(),
+                                      {getLLVMPointerType(), getLLVMInt64Type(),
+                                       getLLVMInt64Type(), getLLVMInt64Type(),
+                                       getLLVMInt64Type()},
+                                      /*isVarArg=*/false));
+  }
+
+  for (auto bufferElementType : bufferElementTypes) {
+    auto func = getBufferBindingFunc(bufferElementType);
+    if (optionalSymbols.count(func)) {
+      builder.create<FuncOp>(
+          loc, func,
+          FunctionType::get(
+              {ArrayRef<Type>{getLLVMPointerType(), getLLVMInt32Type(),
+                              getLLVMInt32Type(), getLLVMInt32Type(),
+                              getUnrankedMemRefType(bufferElementType)}},
+              {}, &ctx),
+          ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+    }
+  }
+}
 
 void ConvertVulkanTollvm::runOnOperation() {
+  getCachedTypes();
   mlir::ModuleOp module = getOperation();
   mlir::MLIRContext *context = &getContext();
 
@@ -247,7 +246,7 @@ void ConvertVulkanTollvm::runOnOperation() {
   if (mlir::failed(mlir::applyPartialConversion(module, target, patterns)))
     signalPassFailure();
   // Insert runtime function declarations.
-  //  declareVulkanFunctions(getOperation().getLoc());
+  declareVulkanFunctions(getOperation().getLoc());
 }
 
 /// A pass to convert gpu launch op to vulkan launch call op, by creating a
@@ -310,6 +309,8 @@ public:
   }
 };
 
+// TODO add create Vkbuffer API in vulkan runtime(include malloc and bind
+//  buffer, then return vkbuffer)
 class ConvertAlloc : public ConvertVulkanOpBasePattern<vulkan::Alloc> {
 public:
   ConvertAlloc(mlir::MLIRContext *context)
@@ -317,12 +318,33 @@ public:
   mlir::LogicalResult
   matchAndRewrite(vulkan::Alloc op, mlir::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    //TODO need provide alloc on runtime backend.
+    // TODO need provide alloc on runtime backend.
+    return mlir::success();
   }
 };
 
-} // namespace
+class ConvertShaderModule
+    : public ConvertVulkanOpBasePattern<vulkan::CreateShaderModuleOp> {
+public:
+  ConvertShaderModule(mlir::MLIRContext *context)
+      : ConvertVulkanOpBasePattern<vulkan::CreateShaderModuleOp>(context) {}
+  mlir::LogicalResult
+  matchAndRewrite(vulkan::CreateShaderModuleOp,
+                  mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override;
+};
 
+// convert launchOp to llvm call, would split to serialize spirv module,
+// createVulkanAction, setAction and addAction
+// TODO add serialize module (find launchop-> spirv module), createAction, set
+//  and add. need modify runtime API, specially change complex buffer map.
+mlir::LogicalResult ConvertShaderModule::matchAndRewrite(
+    vulkan::CreateShaderModuleOp, mlir::ArrayRef<mlir::Value> operands,
+    mlir::ConversionPatternRewriter &rewriter) const {}
+
+}; // namespace
+
+// TODO add pattern for readfromdevice op and writetodevice op
 void populateVulkanToPatterns(mlir::MLIRContext *context,
                               mlir::OwningRewritePatternList &patterns) {
   // Populate operation conversion patterns.
@@ -330,6 +352,7 @@ void populateVulkanToPatterns(mlir::MLIRContext *context,
   patterns.insert<ConvertSubmitCommandBuffers>(context);
   patterns.insert<ConvertDeinitVulkan>(context);
   patterns.insert<ConvertAlloc>(context);
+  patterns.insert<ConvertShaderModule>(context);
 }
 
 std::unique_ptr<mlir::Pass> createConvertVulkanTollvmPass() {
