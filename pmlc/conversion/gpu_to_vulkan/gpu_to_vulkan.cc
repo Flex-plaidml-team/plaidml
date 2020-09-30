@@ -158,7 +158,7 @@ LogicalResult ConvertGpuToVulkan::convertLaunchFucOp(FuncOp op) {
     builder.create<gpu::LaunchFuncOp>(
         loc, kernelOp, launchFuncOp.getGridSizeOperandValues(),
         launchFuncOp.getBlockSizeOperandValues(), launchFuncOp.getOperands());
-
+    builder.create<vulkan::ShaderModuleEnd>(loc);
     launchFuncOp.erase();
   });
   return mlir::success();

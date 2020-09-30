@@ -28,6 +28,10 @@ def Vk_CreateShaderModuleOp : Vk_Op<"create_shader_module">,
   let regions = (region AnyRegion:$body);
 }
 
+def Vk_ShaderModuleEnd : Vk_Op<"module_end", [Terminator]> {
+  let summary = "End of scheduling block.";
+}
+
 def Vk_Alloc : Vk_Op<"alloc">
                , Arguments<(ins VkShaderModule:$VulkanInvocation)>
                 {
@@ -48,7 +52,7 @@ def Vk_WriteToDevice : Vk_Op<"Vk_WriteToDevice">
   let summary = "Schedules data copy from execution environment for use on host.";
 }
 
-def Vk_InitVulkan : Vk_Op<"initvulkan">
+def Vk_InitVulkan : Vk_Op<"InitVulkan">
                         , Results<(outs VkShaderModule:$VulkanInvocation)>{
    let summary = "init vulkan device and command buffer";
    let description = [{
