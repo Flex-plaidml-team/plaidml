@@ -23,6 +23,7 @@
 #include "pmlc/conversion/pxa_to_affine/passes.h"
 #include "pmlc/conversion/stdx_to_llvm/passes.h"
 #include "pmlc/conversion/gpu_to_vulkan/passes.h"
+#include "pmlc/conversion/vulkan_to_llvm/passes.h"
 #include "pmlc/conversion/tile_to_pxa/passes.h"
 #include "pmlc/dialect/pxa/transforms/passes.h"
 #include "pmlc/dialect/stdx/ir/ops.h"
@@ -184,10 +185,11 @@ void pipelineBuilder(OpPassManager &pm) {
 
   // GPU to Vulkan.
   pm.addPass(conversion::gpu_to_vulkan::createConvertGpuToVulkanPass());
+  pm.addPass(conversion::vulkan_to_llvm::createConvertVulkanTollvmPass());
 //  pm.addPass(conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
 
   // Convert Vulkan calls to LLVM code
-  pm.addPass(createConvertStandardToLLVM());
+//  pm.addPass(createConvertStandardToLLVM());
 }
 
 static PassPipelineRegistration<>

@@ -22,8 +22,8 @@ filegroup(
         "//pmlc/dialect/pxa/tests:all",
         "//pmlc/dialect/stdx/tests:all",
         "//pmlc/dialect/tile/tests:all",
-        "//pmlc/dialect/xsmm/tests:all",
         "//pmlc/dialect/vulkan/tests:all",
+        "//pmlc/dialect/xsmm/tests:all",
         "//pmlc/rt/tests:all",
         "//pmlc/rt/vulkan/tests:all",
         "//pmlc/target/intel_gen/tests:all",
@@ -34,12 +34,12 @@ filegroup(
 
 plaidml_cc_test(
     name = "test",
+    size = "small",
     srcs = ["test.cc"],
     deps = [
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Transforms",
     ],
-    size = "small",
 )
 
 plaidml_cc_library(
@@ -59,19 +59,19 @@ plaidml_cc_library(
         ":hdrs",
         "//pmlc/conversion/gpu",
         "//pmlc/conversion/gpu_to_comp",
-        "//pmlc/conversion/gpu_to_vulkan",
         "//pmlc/conversion/gpu_to_spirv",
+        "//pmlc/conversion/gpu_to_vulkan",
         "//pmlc/conversion/pxa_to_affine",
         "//pmlc/conversion/stdx_to_llvm",
-        "//pmlc/conversion/vulkan_to_llvm",
         "//pmlc/conversion/tile_to_pxa",
+        "//pmlc/conversion/vulkan_to_llvm",
         "//pmlc/dialect/comp",
         "//pmlc/dialect/eltwise",
         "//pmlc/dialect/pxa",
         "//pmlc/dialect/stdx",
         "//pmlc/dialect/tile",
-        "//pmlc/dialect/xsmm",
         "//pmlc/dialect/vulkan",
+        "//pmlc/dialect/xsmm",
         "//pmlc/target/demo",
         "//pmlc/target/intel_gen",
         "//pmlc/target/x86",

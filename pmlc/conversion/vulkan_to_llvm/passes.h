@@ -11,52 +11,14 @@ class MLIRContext;
 class ModuleOp;
 class OwningRewritePatternList;
 class Pass;
-class TypeConverter;
 } // namespace mlir
 
 namespace pmlc::conversion::vulkan_to_llvm {
-//class BinaryModulesMap;
-//
-//// ============================================================================
-//// Common
-//// ============================================================================
-///// Creates empty BinaryModulesMap that can be filled by functions
-///// serializing modules to binary form.
-//std::unique_ptr<BinaryModulesMap> getEmptyModulesMap();
-//
-///// Walks operation `op` and serializes all spirv modules,
-///// inserting binary as constants into `op`s region.
-///// Fills `map` with information about serialized modules.
-///// Erases all serialized spirv modules.
-//mlir::LogicalResult serializeSpirvKernels(mlir::ModuleOp &op,
-//                                          BinaryModulesMap &map);
-//
-///// Populates type conversion patterns that can be used across
-///// lowerings for multiple runtimes.
-//void populateCommonPatterns(mlir::MLIRContext *context,
-//                            mlir::TypeConverter &typeConverter);
-//
-///// Adds declarations of functions common across lowerings
-///// to specified top-level module.
-//void addCommonFunctionDeclarations(mlir::ModuleOp &module);
-//
-//// ============================================================================
-//// OpenCL
-//// ============================================================================
-///// Populates `patterns` and `typeConverter` with conversion patterns that
-///// perform lowering for OpenCL runtime.
-//void populateCompToOclPatterns(mlir::MLIRContext *context,
-//                               const BinaryModulesMap &modulesMap,
-//                               mlir::TypeConverter &typeConverter,
-//                               mlir::OwningRewritePatternList &patterns);
-//
-///// Adds declarations of functions specific to OpenCL runtime.
-//void addOclFunctionDeclarations(mlir::ModuleOp &module);
-//
-///// Returns pass that will perform lowering for OpenCL runtime.
-///// To provide stronger guarantees any comp operation with runtime different
-///// than OpenCL will cause this pass to report failure.
-//std::unique_ptr<mlir::Pass> createConvertCompToOclPass();
+
+void populateVulkanToPatterns(mlir::MLIRContext *context,
+                              mlir::OwningRewritePatternList &patterns);
+
+std::unique_ptr<mlir::Pass> createConvertVulkanTollvmPass();
 
 /// Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION
