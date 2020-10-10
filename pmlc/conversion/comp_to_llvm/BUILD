@@ -24,10 +24,11 @@ plaidml_cc_library(
     name = "comp_to_llvm",
     srcs = [
         "common.cc",
-        "comp_to_ocl.cc",
+#        "comp_to_ocl.cc",
+        "comp_to_vulkan.cc",
         "pass_detail.h",
-        "utils.h",
         "utils.cc",
+        "utils.h",
     ],
     hdrs = [
         "passes.h",
@@ -35,13 +36,14 @@ plaidml_cc_library(
     deps = [
         ":gen-pass",
         "//pmlc/dialect/comp/ir",
+        "//pmlc/util",
+        "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMDialect",
+        "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:SPIRVDialect",
         "@llvm-project//mlir:SPIRVSerialization",
         "@llvm-project//mlir:StandardOps",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:Pass",
-        "@llvm-project//mlir:Transforms",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:Transforms",
     ],
 )

@@ -55,6 +55,18 @@ void populateCompToOclPatterns(mlir::MLIRContext *context,
 /// Adds declarations of functions specific to OpenCL runtime.
 void addOclFunctionDeclarations(mlir::ModuleOp &module);
 
+// ============================================================================
+// Vulkan
+// ============================================================================
+
+void populateCompToVkPatterns(mlir::MLIRContext *context,
+                               const BinaryModulesMap &modulesMap,
+                               mlir::TypeConverter &typeConverter,
+                               mlir::OwningRewritePatternList &patterns);
+
+void addVkFunctionDeclarations(mlir::ModuleOp &module);
+
+
 /// Returns pass that will perform lowering for OpenCL runtime.
 /// To provide stronger guarantees any comp operation with runtime different
 /// than OpenCL will cause this pass to report failure.
