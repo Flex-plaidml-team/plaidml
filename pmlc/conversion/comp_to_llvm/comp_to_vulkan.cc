@@ -38,6 +38,11 @@ static constexpr const char *kCreateVulkanMemoryTransferAction =
     "createVulkanMemoryTransferAction";
 static constexpr const char *kAddVulkanLaunchActionToSchedule =
     "addVulkanLaunchActionToSchedule";
+static constexpr const char *kVkBarrier = "VkBarrier";
+static constexpr const char *kVkWait = "VkWait";
+static constexpr const char *kVkDealloc = "VkDealloc";
+static constexpr const char *kVkRead = "VkRead";
+static constexpr const char *kVkWrite = "VkWrite";
 
 static constexpr const char *kBindBufferBFloat16 = "bindBufferBFloat16";
 static constexpr const char *kBindBufferFloat16 = "bindBufferFloat16";
@@ -51,12 +56,40 @@ static constexpr const int kByteBits = 8;
 
 namespace {
 
-class ConvertCompToVk : public ConvertCompToVkBase<ConvertCompToVk> {
+const char *getBufferBindingFunc(mlir::Type elementType) {
+  if (elementType.isInteger(8)) {
+    return kBindBufferInteger8;
+  }
+  if (elementType.isInteger(16)) {
+    return kBindBufferInteger16;
+  }
+  if (elementType.isInteger(32)) {
+    return kBindBufferInteger32;
+  }
+  if (elementType.isInteger(64)) {
+    return kBindBufferInteger64;
+  }
+  if (elementType.isBF16()) {
+    return kBindBufferBFloat16;
+  }
+  if (elementType.isF16()) {
+    return kBindBufferFloat16;
+  }
+  if (elementType.isF32()) {
+    return kBindBufferFloat32;
+  }
+  if (elementType.isF64()) {
+    return kBindBufferFloat64;
+  }
+  return nullptr;
+}
+
+class ConvertCompToOcl : public ConvertCompToOclBase<ConvertCompToOcl> {
 public:
   void runOnOperation();
 };
 
-void ConvertCompToVk::runOnOperation() {
+void ConvertCompToOcl::runOnOperation() {
   mlir::ModuleOp module = getOperation();
   // Serialize SPIRV kernels.
   BinaryModulesMap modulesMap;
@@ -116,10 +149,11 @@ struct ConvertToFuncCallPattern : ConvertCompToVkBasePattern<Op> {
 using ConvertToInitVulkan = ConvertToFuncCallPattern<comp::CreateExecEnv>;
 using ConvertToDeinitVulkan = ConvertToFuncCallPattern<comp::DestroyExecEnv>;
 using ConvertToCommandBufferSubmit = ConvertToFuncCallPattern<comp::Submit>;
+
 // TODO dont open those api on vulkan backend;
-using ConvertToVulkanWait = ConvertToFuncCallPattern<comp::Wait>;
-using ConvertDealloc = ConvertToFuncCallPattern<comp::Dealloc>;
+using ConvertWait = ConvertToFuncCallPattern<comp::Wait>;
 using ConvertScheduleBarrier = ConvertToFuncCallPattern<comp::ScheduleBarrier>;
+using ConvertDealloc = ConvertToFuncCallPattern<comp::Dealloc>;
 
 /// Template pattern common for both comp::ScheduleRead and
 /// comp::ScheduleWrite.
@@ -128,7 +162,7 @@ struct ConvertScheduleReadWrite : ConvertCompToVkBasePattern<Op> {
   ConvertScheduleReadWrite(mlir::StringRef funcName,
                            mlir::TypeConverter &typeConverter,
                            mlir::MLIRContext *context)
-      : ConvertCompToOclBasePattern<Op>(typeConverter, context),
+      : ConvertCompToVkBasePattern<Op>(typeConverter, context),
         funcName(funcName) {}
 
   mlir::LogicalResult
@@ -149,36 +183,10 @@ struct ConvertAlloc : ConvertCompToVkBasePattern<comp::Alloc> {
   matchAndRewrite(comp::Alloc op, mlir::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override;
 
-  const char *getBufferBindingFunc(mlir::Type elementType) {
-    if (elementType.isInteger(8)) {
-      return kBindBufferInteger8;
-    }
-    if (elementType.isInteger(16)) {
-      return kBindBufferInteger16;
-    }
-    if (elementType.isInteger(32)) {
-      return kBindBufferInteger32;
-    }
-    if (elementType.isInteger(64)) {
-      return kBindBufferInteger64;
-    }
-    if (elementType.isBF16()) {
-      return kBindBufferBFloat16;
-    }
-    if (elementType.isF16()) {
-      return kBindBufferFloat16;
-    }
-    if (elementType.isF32()) {
-      return kBindBufferFloat32;
-    }
-    if (elementType.isF64()) {
-      return kBindBufferFloat64;
-    }
-    return nullptr;
-  }
-
-  static unsigned bindIndex;
+  static uint64_t numAlloc;
 };
+
+uint64_t ConvertAlloc::numAlloc = 0;
 
 struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
   ConvertScheduleFunc(const BinaryModulesMap &modulesMap,
@@ -217,15 +225,14 @@ void populateCompToVkPatterns(mlir::MLIRContext *context,
   patterns.insert<ConvertScheduleFunc>(modulesMap, typeConverter, context);
   patterns.insert<ConvertAlloc>(typeConverter, context);
 
-  // TODO modify those to vulkan api
-  patterns.insert<ConvertDealloc>(kOclDealloc, typeConverter, context);
-  patterns.insert<ConvertScheduleBarrier>(kOclBarrier, typeConverter, context,
+  patterns.insert<ConvertDealloc>(kVkDealloc, typeConverter, context);
+  patterns.insert<ConvertScheduleBarrier>(kVkBarrier, typeConverter, context,
                                           /*varArg=*/true, /*nonVarArgs=*/1);
-  patterns.insert<ConvertWait>(kOclWait, typeConverter, context,
+  patterns.insert<ConvertWait>(kVkWait, typeConverter, context,
                                /*varArg=*/true, /*nonVarArgs=*/0);
 
-  patterns.insert<ConvertScheduleRead>(kOclRead, typeConverter, context);
-  patterns.insert<ConvertScheduleWrite>(kOclWrite, typeConverter, context);
+  patterns.insert<ConvertScheduleRead>(kVkRead, typeConverter, context);
+  patterns.insert<ConvertScheduleWrite>(kVkWrite, typeConverter, context);
 }
 
 void addVkFunctionDeclarations(mlir::ModuleOp &module) {
@@ -293,9 +300,9 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
     builder.create<mlir::FuncOp>(
         loc, func.first,
         mlir::FunctionType::get(
-            {mlir::ArrayRef<mlir::Type>{llvmInt8Ptr, llvmInt32, llvmInt32,
-                                        llvmInt32,
-                                        getUnrankedMemRefType(func.second)}},
+            {mlir::ArrayRef<mlir::Type>{
+                llvmInt8Ptr, llvmInt32, llvmInt32, llvmInt32,
+                mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
             {}, context),
         mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
   }
@@ -390,7 +397,7 @@ ConvertAlloc::matchAndRewrite(comp::Alloc op,
   auto buffer = operands[1];
   // Create LLVM constant for the descriptor binding index.
   mlir::Value descriptorBinding = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Ty, rewriter.getI32IntegerAttr(bindIndex++));
+      loc, llvmInt32Ty, rewriter.getI32IntegerAttr(numAlloc++));
 
   auto memRefType = buffer.getType().dyn_cast_or_null<mlir::MemRefType>();
   if (!memRefType) {
@@ -411,13 +418,13 @@ ConvertAlloc::matchAndRewrite(comp::Alloc op,
       loc, llvmInt32Ty,
       rewriter.getI32IntegerAttr(numElement * elementTypeSize));
   mlir::Value unrankedBuffer = rewriter.create<mlir::MemRefCastOp>(
-      loc, buffer, getUnrankedMemRefType(elementType));
+      loc, buffer,
+      mlir::UnrankedMemRefType::get(elementType, /*memorySpace=*/0));
   rewriter.create<mlir::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
       mlir::ArrayRef<mlir::Value>{operands[0], descriptorSet, descriptorBinding,
                                   bufferByteSize, unrankedBuffer});
-
   return mlir::success();
 }
 
@@ -431,9 +438,6 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   auto launchOp = mlir::cast<gpu::LaunchFuncOp>(op.body().front().front());
   std::string binaryName = launchOp.getKernelModuleName().str();
   std::string kernelName = launchOp.getKernelName().str();
-  mlir::Type llvmEventType = convertType(op.getType());
-  LLVM::LLVMType llvmKernelType =
-      LLVM::LLVMType::getInt8PtrTy(rewriter.getContext());
 
   // Create kernel from serialized binary.
   if (modulesMap.count(binaryName) == 0)
@@ -454,20 +458,13 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       rewriter.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
       mlir::ArrayRef<mlir::Value>{operands[0], binaryPtr, binaryBytes, namePtr,
                                   gridSize.x, gridSize.y, gridSize.z});
-
+  createCall.dump();
   //  mlir::Value kernel = createCall.getResult(0);
 
   LLVM::LLVMType llvmInt32Ty =
       LLVM::LLVMType::getInt32Ty(rewriter.getContext());
   // Set kernel arguments.
   for (unsigned argI = 0; argI < launchOp.getNumKernelOperands(); ++argI) {
-    mlir::Type llvmInt32Type =
-        LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-    mlir::Value argIndex = rewriter.create<LLVM::ConstantOp>(
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(argI));
-    mlir::Value remappedArg =
-        rewriter.getRemappedValue(launchOp.getKernelOperand(argI));
-
     mlir::Value subgroupSizeVal = rewriter.create<LLVM::ConstantOp>(
         loc, llvmInt32Ty, rewriter.getI32IntegerAttr(1));
 
@@ -481,6 +478,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   // because dispatch sizes are index types prohibiting use of
   // llvm function and variadic arguments.
   for (mlir::Value event : operands.slice(1)) {
+    event.dump();
     rewriter.create<LLVM::CallOp>(
         loc, mlir::ArrayRef<mlir::Type>{},
         rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
@@ -490,7 +488,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
 }
 
 std::unique_ptr<mlir::Pass> createConvertCompToOclPass() {
-  return std::make_unique<ConvertCompToVk>();
+  return std::make_unique<ConvertCompToOcl>();
 }
 
 } // namespace pmlc::conversion::comp_to_llvm

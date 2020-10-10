@@ -82,6 +82,17 @@ void run(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 
+// TODO open vulkan backend API;
+void *VkBarrier(void *invocation, uint32_t count, ...) { return nullptr; }
+
+void VkWait(uint32_t count, ...) {}
+
+void VkDealloc(void *invocation, void *memory) {}
+
+void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) { return nullptr; }
+
+void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) { return nullptr; }
+
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
       void *vkInvocation, DescriptorSetIndex setIndex, BindingIndex bindIndex, \
@@ -140,6 +151,11 @@ struct Registration {
                    reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger64));
     registerSymbol("_mlir_ciface_fillResourceFloat32",
                    reinterpret_cast<void *>(_mlir_ciface_fillResourceFloat32));
+    registerSymbol("VkBarrier", reinterpret_cast<void *>(VkBarrier));
+    registerSymbol("VkWait", reinterpret_cast<void *>(VkWait));
+    registerSymbol("VkDealloc", reinterpret_cast<void *>(VkDealloc));
+    registerSymbol("VkRead", reinterpret_cast<void *>(VkRead));
+    registerSymbol("VkWrite", reinterpret_cast<void *>(VkWrite));
   }
 };
 static Registration reg;
