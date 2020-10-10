@@ -98,8 +98,9 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(conversion::gpu::createGpuKernelOutliningPass());
 
   // Convert GPU to comp.
+  // TODO figure out the memorySpace for Vulkan
   pm.addPass(pmlc::conversion::gpu_to_comp::createConvertGpuToCompPass(
-      comp::ExecEnvRuntime::OpenCL, /*memorySpace=*/11));
+      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/11));
   pm.addPass(comp::createExecEnvCoalescingPass());
   pm.addPass(comp::createMinimizeAllocationsPass());
 
