@@ -393,8 +393,7 @@ ConvertAlloc::matchAndRewrite(comp::Alloc op,
 
   mlir::Value descriptorSet = rewriter.create<LLVM::ConstantOp>(
       loc, llvmInt32Ty, rewriter.getI32IntegerAttr(0));
-
-  auto buffer = operands[1];
+  auto buffer = op.hostMem();
   // Create LLVM constant for the descriptor binding index.
   mlir::Value descriptorBinding = rewriter.create<LLVM::ConstantOp>(
       loc, llvmInt32Ty, rewriter.getI32IntegerAttr(numAlloc++));
@@ -484,6 +483,8 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
         rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
         mlir::ArrayRef<mlir::Value>{operands[0]});
   }
+
+  rewriter.eraseOp(op);
   return mlir::success();
 }
 
