@@ -176,6 +176,8 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
+  // Do new kernel create for operations defined between gpu launch blocks
+
   // Do kernel outlining
   pm.addPass(conversion::gpu::createGpuKernelOutliningPass());
 
