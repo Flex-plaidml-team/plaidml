@@ -215,8 +215,6 @@ void populateCompToVkPatterns(mlir::MLIRContext *context,
       });
   typeConverter.addConversion(
       [=](comp::EventType eventType) -> mlir::Optional<mlir::Type> {
-        if (eventType.getRuntime() != comp::ExecEnvRuntime::OpenCL)
-          return llvm::None;
         return llvmInt8Ptr;
       });
   patterns.insert<ConvertToInitVulkan>(kInitVulkan, typeConverter, context);
@@ -244,21 +242,19 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   LLVM::LLVMType llvmVoid = LLVM::LLVMType::getVoidTy(context);
   LLVM::LLVMType llvmInt32 = LLVM::LLVMType::getInt32Ty(context);
   LLVM::LLVMType llvmInt64Type = LLVM::LLVMType::getInt64Ty(context);
-  mlir::Type mlirIndexType = builder.getIndexType();
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kInitVulkan,
       LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
-  builder.create<mlir::FuncOp>(
+  builder.create<LLVM::LLVMFuncOp>(
       loc, kCreateVulkanLaunchKernelAction,
-      mlir::FunctionType::get(
-          {mlir::ArrayRef<mlir::Type>{llvmInt8Ptr, llvmInt8Ptr, llvmInt32,
-                                      llvmInt8Ptr, mlirIndexType, mlirIndexType,
-                                      mlirIndexType}},
-          {}, context),
-      mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+      LLVM::LLVMType::getFunctionTy(llvmVoid,
+                                    {llvmInt8Ptr, llvmInt8Ptr, llvmInt32,
+                                     llvmInt8Ptr, llvmInt32, llvmInt32,
+                                     llvmInt32},
+                                    /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kSetVulkanLaunchKernelAction,
@@ -273,6 +269,11 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   builder.create<LLVM::LLVMFuncOp>(
       loc, kRun,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr},
+                                    /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkScheduleFunc,
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {},
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
@@ -302,12 +303,12 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
         loc, func.first,
         mlir::FunctionType::get(
             {mlir::ArrayRef<mlir::Type>{
-                llvmInt8Ptr, llvmInt32, llvmInt32, llvmInt32,
+                llvmInt8Ptr, llvmInt32,
                 mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
             {}, context),
         mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
   }
-}
+} // namespace pmlc::conversion::comp_to_vulkanCall
 
 template <class Op>
 mlir::LogicalResult ConvertToFuncCallPattern<Op>::matchAndRewrite(
@@ -462,13 +463,20 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   mlir::Value namePtr = getPtrToGlobalString(
       rewriter, loc, modulesMap.at(binaryName).kernelsNameMap.at(kernelName));
 
-  auto gridSize = launchOp.getGridSizeOperandValues();
+  LLVM::LLVMType llvmInt32 = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+  auto gSize = launchOp.getGridSizeOperandValues();
+  auto x = gSize.x.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  auto y = gSize.y.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  auto z = gSize.z.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
+  mlir::Value gx = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, x);
+  mlir::Value gy = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, y);
+  mlir::Value gz = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, z);
 
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
       mlir::ArrayRef<mlir::Value>{operands[0], binaryPtr, binaryBytes, namePtr,
-                                  gridSize.x, gridSize.y, gridSize.z});
+                                  gx, gy, gz});
 
   LLVM::LLVMType llvmInt32Ty =
       LLVM::LLVMType::getInt32Ty(rewriter.getContext());
@@ -482,12 +490,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
         rewriter.getSymbolRefAttr(kSetVulkanLaunchKernelAction),
         mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
   }
-  // Set event dependencies. This is done with separate functions
-  // on kernel as opposed to variadic argument in final function,
-  // because dispatch sizes are index types prohibiting use of
-  // llvm function and variadic arguments.
-  //  for (mlir::Value event : operands.slice(1)) {
-  //    event.dump();
+
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
@@ -495,12 +498,10 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   //  }
 
   mlir::Type llvmEventType = this->convertType(op.getType());
-  rewriter.replaceOpWithNewOp<mlir::CallOp>(
+  rewriter.replaceOpWithNewOp<LLVM::CallOp>(
       op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmEventType},
       rewriter.getSymbolRefAttr(kVkScheduleFunc),
       mlir::ArrayRef<mlir::Value>{});
-
-  op.dump();
   return mlir::success();
 }
 
