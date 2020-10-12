@@ -93,6 +93,8 @@ void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) { retu
 
 void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) { return nullptr; }
 
+void *VkScheduleFunc() { return nullptr; }
+
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
       void *vkInvocation, DescriptorSetIndex setIndex, BindingIndex bindIndex, \
@@ -156,6 +158,7 @@ struct Registration {
     registerSymbol("VkDealloc", reinterpret_cast<void *>(VkDealloc));
     registerSymbol("VkRead", reinterpret_cast<void *>(VkRead));
     registerSymbol("VkWrite", reinterpret_cast<void *>(VkWrite));
+    registerSymbol("VkScheduleFunc", reinterpret_cast<void *>(VkScheduleFunc));
   }
 };
 static Registration reg;

@@ -43,6 +43,7 @@ static constexpr const char *kVkWait = "VkWait";
 static constexpr const char *kVkDealloc = "VkDealloc";
 static constexpr const char *kVkRead = "VkRead";
 static constexpr const char *kVkWrite = "VkWrite";
+static constexpr const char *kVkScheduleFunc = "VkScheduleFunc";
 
 static constexpr const char *kBindBufferBFloat16 = "bindBufferBFloat16";
 static constexpr const char *kBindBufferFloat16 = "bindBufferFloat16";
@@ -312,6 +313,7 @@ template <class Op>
 mlir::LogicalResult ConvertToFuncCallPattern<Op>::matchAndRewrite(
     Op op, mlir::ArrayRef<mlir::Value> operands,
     mlir::ConversionPatternRewriter &rewriter) const {
+  op.dump();
   if (!this->isMatchingRuntime(op))
     return mlir::failure();
 
@@ -348,6 +350,7 @@ template <class Op>
 mlir::LogicalResult ConvertScheduleReadWrite<Op>::matchAndRewrite(
     Op op, mlir::ArrayRef<mlir::Value> operands,
     mlir::ConversionPatternRewriter &rewriter) const {
+  op.dump();
   if (!this->isMatchingRuntime(op))
     return mlir::failure();
 
@@ -383,6 +386,7 @@ mlir::LogicalResult
 ConvertAlloc::matchAndRewrite(comp::Alloc op,
                               mlir::ArrayRef<mlir::Value> operands,
                               mlir::ConversionPatternRewriter &rewriter) const {
+  op.dump();
   if (!isMatchingRuntime(op))
     return mlir::failure();
 
@@ -430,6 +434,7 @@ ConvertAlloc::matchAndRewrite(comp::Alloc op,
 mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
     comp::ScheduleFunc op, mlir::ArrayRef<mlir::Value> operands,
     mlir::ConversionPatternRewriter &rewriter) const {
+  op.dump();
   if (!isMatchingRuntime(op))
     return mlir::failure();
 
@@ -476,15 +481,18 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   // on kernel as opposed to variadic argument in final function,
   // because dispatch sizes are index types prohibiting use of
   // llvm function and variadic arguments.
-  for (mlir::Value event : operands.slice(1)) {
-    event.dump();
-    rewriter.create<LLVM::CallOp>(
-        loc, mlir::ArrayRef<mlir::Type>{},
-        rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
-        mlir::ArrayRef<mlir::Value>{operands[0]});
-  }
+//  for (mlir::Value event : operands.slice(1)) {
+//    event.dump();
+  rewriter.create<LLVM::CallOp>(
+      loc, mlir::ArrayRef<mlir::Type>{},
+      rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
+      mlir::ArrayRef<mlir::Value>{operands[0]});
+//  }
 
-  rewriter.eraseOp(op);
+  mlir::Type llvmEventType = this->convertType(op.getType());
+  rewriter.replaceOpWithNewOp<mlir::CallOp>(
+      op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmEventType},
+      rewriter.getSymbolRefAttr(kVkScheduleFunc), mlir::ArrayRef<mlir::Value>{});
   return mlir::success();
 }
 
