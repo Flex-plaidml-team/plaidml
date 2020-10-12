@@ -21,10 +21,10 @@ gentbl(
 )
 
 plaidml_cc_library(
-    name = "comp_to_llvm",
+    name = "comp_to_vulkanCall",
     srcs = [
         "common.cc",
-        "comp_to_ocl.cc",
+        "comp_to_vulkan.cc",
         "pass_detail.h",
         "utils.cc",
         "utils.h",

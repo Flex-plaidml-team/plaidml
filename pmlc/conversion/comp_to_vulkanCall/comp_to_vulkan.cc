@@ -1,5 +1,5 @@
 // Copyright 2020, Intel Corporation
-#include "pmlc/conversion/comp_to_llvm/passes.h"
+#include "pmlc/conversion/comp_to_vulkanCall/passes.h"
 
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -16,11 +16,11 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-#include "pmlc/conversion/comp_to_llvm/pass_detail.h"
-#include "pmlc/conversion/comp_to_llvm/utils.h"
+#include "pmlc/conversion/comp_to_vulkanCall/pass_detail.h"
+#include "pmlc/conversion/comp_to_vulkanCall/utils.h"
 #include "pmlc/dialect/comp/ir/dialect.h"
 
-namespace pmlc::conversion::comp_to_llvm {
+namespace pmlc::conversion::comp_to_vulkanCall {
 
 namespace comp = pmlc::dialect::comp;
 namespace gpu = mlir::gpu;
@@ -85,12 +85,12 @@ const char *getBufferBindingFunc(mlir::Type elementType) {
   return nullptr;
 }
 
-class ConvertCompToOcl : public ConvertCompToOclBase<ConvertCompToOcl> {
+class ConvertCompToVulkanCall : public ConvertCompToVulkanCallBase<ConvertCompToVulkanCall>{
 public:
   void runOnOperation();
 };
 
-void ConvertCompToOcl::runOnOperation() {
+void ConvertCompToVulkanCall::runOnOperation() {
   mlir::ModuleOp module = getOperation();
   // Serialize SPIRV kernels.
   BinaryModulesMap modulesMap;
@@ -496,8 +496,8 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   return mlir::success();
 }
 
-std::unique_ptr<mlir::Pass> createConvertCompToOclPass() {
-  return std::make_unique<ConvertCompToOcl>();
+std::unique_ptr<mlir::Pass> createConvertCompToVulkanCallPass() {
+  return std::make_unique<ConvertCompToVulkanCall>();
 }
 
-} // namespace pmlc::conversion::comp_to_llvm
+} // namespace pmlc::conversion::comp_to_vulkanCall
