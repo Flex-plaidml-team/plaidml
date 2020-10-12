@@ -32,14 +32,15 @@ namespace pmlc::rt::vulkan {
 namespace {
 
 template <typename T>
-void bindBuffer(void *vkInvocation, DescriptorSetIndex setIndex,
-                BindingIndex bindIndex, uint32_t bufferByteSize,
+void bindBuffer(void *vkInvocation, uint32_t bufferByteSize,
                 ::UnrankedMemRefType<T> *unrankedMemRef) {
+  vulkanBuffer newBuffer;
   DynamicMemRefType<T> memRef(*unrankedMemRef);
   T *ptr = memRef.data + memRef.offset;
   VulkanHostMemoryBuffer memBuffer{ptr, bufferByteSize};
-  static_cast<VulkanInvocation *>(vkInvocation)
-      ->setResourceData(setIndex, bindIndex, memBuffer);
+  newBuffer.HostBuffer = memBuffer;
+  newBuffer.spirvBuffer = mlir::spirv::StorageClass::StorageBuffer;
+  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
 }
 
 } // namespace
@@ -82,6 +83,11 @@ void run(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 
+void *VkAlloc(void *vkInvocation, DescriptorSetIndex setIndex) {
+  return static_cast<VulkanInvocation *>(vkInvocation)
+      ->createMemoryBuffer(setIndex);
+}
+
 // TODO open vulkan backend API;
 void *VkBarrier(void *invocation, uint32_t count, ...) { return nullptr; }
 
@@ -89,18 +95,21 @@ void VkWait(uint32_t count, ...) {}
 
 void VkDealloc(void *invocation, void *memory) {}
 
-void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) { return nullptr; }
+void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) {
+  return nullptr;
+}
 
-void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) { return nullptr; }
+void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) {
+  return nullptr;
+}
 
 void *VkScheduleFunc() { return nullptr; }
 
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
-      void *vkInvocation, DescriptorSetIndex setIndex, BindingIndex bindIndex, \
-      uint32_t bufferByteSize, ::UnrankedMemRefType<_type_> *unrankedMemRef) { \
-    bindBuffer(vkInvocation, setIndex, bindIndex, bufferByteSize,              \
-               unrankedMemRef);                                                \
+      void *vkInvocation, uint32_t bufferByteSize,                             \
+      ::UnrankedMemRefType<_type_> *unrankedMemRef) {                          \
+    bindBuffer(vkInvocation, bufferByteSize, unrankedMemRef);                  \
   }
 
 BIND_BUFFER_IMPL(Float16, half_float::half);
@@ -155,6 +164,7 @@ struct Registration {
                    reinterpret_cast<void *>(_mlir_ciface_fillResourceFloat32));
     registerSymbol("VkBarrier", reinterpret_cast<void *>(VkBarrier));
     registerSymbol("VkWait", reinterpret_cast<void *>(VkWait));
+    registerSymbol("VkAlloc", reinterpret_cast<void *>(VkAlloc));
     registerSymbol("VkDealloc", reinterpret_cast<void *>(VkDealloc));
     registerSymbol("VkRead", reinterpret_cast<void *>(VkRead));
     registerSymbol("VkWrite", reinterpret_cast<void *>(VkWrite));

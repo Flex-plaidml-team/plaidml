@@ -41,6 +41,14 @@ struct VulkanHostMemoryBuffer {
   uint32_t size{0};
 };
 
+/// Struct contianing information regarding alloc buffer memory.
+
+struct vulkanBuffer {
+    VulkanDeviceMemoryBuffer devBuffer;
+    VulkanHostMemoryBuffer HostBuffer;
+    mlir::spirv::StorageClass spirvBuffer;
+};
+
 /// Struct containing the number of local workgroups to dispatch for each
 /// dimension.
 struct NumWorkGroups {
@@ -152,12 +160,14 @@ public:
 
   void run();
 
+  void allocNewBuffer(vulkanBuffer buffer);
+  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
+
   /// Sets needed data for Vulkan device.
   void setResourceData(const DescriptorSetIndex desIndex,
                        const BindingIndex bindIndex,
                        const VulkanHostMemoryBuffer &hostMemBuffer);
 
-private:
   void mapStorageClassToDescriptorType(mlir::spirv::StorageClass storageClass,
                                        VkDescriptorType &descriptorType);
 
@@ -181,8 +191,10 @@ private:
   void submitCommandBuffersToQueue();
   void updateHostMemoryBuffers();
 
+private:
   std::vector<ActionPtr> schedule;
   std::shared_ptr<LaunchKernelAction> curr;
+  std::vector<vulkanBuffer> deviceBufferPool;
   std::shared_ptr<VulkanDevice> device;
   VkCommandPool commandPool;
   llvm::SmallVector<VkCommandBuffer, 1> commandBuffers;
