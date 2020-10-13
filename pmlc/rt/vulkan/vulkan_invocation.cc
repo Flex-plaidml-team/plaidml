@@ -58,18 +58,6 @@ VulkanInvocation::~VulkanInvocation() {
                                      nullptr);
       }
       vkDestroyShaderModule(device->getDevice(), kernel->shaderModule, nullptr);
-
-      // For each descriptor set.
-      //      for (auto &deviceMemoryBufferMapPair :
-      //      kernel->deviceMemoryBufferMap) {
-      //        auto &deviceMemoryBuffers = deviceMemoryBufferMapPair.second;
-      //        // For each descriptor binding.
-      //        for (auto &memoryBuffer : deviceMemoryBuffers) {
-      //          vkFreeMemory(device->getDevice(), memoryBuffer.deviceMemory,
-      //          nullptr); vkDestroyBuffer(device->getDevice(),
-      //          memoryBuffer.buffer, nullptr);
-      //        }
-      //      }
     }
   }
 }
@@ -394,7 +382,7 @@ vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex) {
   memoryBuffer.bufferInfo.buffer = memoryBuffer.buffer;
   memoryBuffer.bufferInfo.offset = 0;
   memoryBuffer.bufferInfo.range = VK_WHOLE_SIZE;
-  memoryBuffer.bindingIndex = setIndex;
+//  memoryBuffer.bindingIndex = setIndex;
   bindVulkanBuffer.devBuffer = memoryBuffer;
   bindVulkanBuffer.setIndex = setIndex;
   return &bindVulkanBuffer;
