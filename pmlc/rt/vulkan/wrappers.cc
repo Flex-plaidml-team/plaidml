@@ -102,7 +102,9 @@ void *VkBarrier(void *invocation, uint32_t count, ...) { return nullptr; }
 
 void VkWait(uint32_t count, ...) {}
 
-void VkDealloc(void *invocation, void *memory) {}
+void VkDealloc(void *invocation, void *memory) {
+  static_cast<VulkanInvocation *>(invocation)->deallocDeviceBuffer(memory);
+}
 
 void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) {
   static_cast<VulkanInvocation *>(invocation)->copyDeviceBufferToHost(dst, src);

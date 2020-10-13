@@ -60,14 +60,16 @@ VulkanInvocation::~VulkanInvocation() {
       vkDestroyShaderModule(device->getDevice(), kernel->shaderModule, nullptr);
 
       // For each descriptor set.
-      for (auto &deviceMemoryBufferMapPair : kernel->deviceMemoryBufferMap) {
-        auto &deviceMemoryBuffers = deviceMemoryBufferMapPair.second;
-        // For each descriptor binding.
-        for (auto &memoryBuffer : deviceMemoryBuffers) {
-          vkFreeMemory(device->getDevice(), memoryBuffer.deviceMemory, nullptr);
-          vkDestroyBuffer(device->getDevice(), memoryBuffer.buffer, nullptr);
-        }
-      }
+      //      for (auto &deviceMemoryBufferMapPair :
+      //      kernel->deviceMemoryBufferMap) {
+      //        auto &deviceMemoryBuffers = deviceMemoryBufferMapPair.second;
+      //        // For each descriptor binding.
+      //        for (auto &memoryBuffer : deviceMemoryBuffers) {
+      //          vkFreeMemory(device->getDevice(), memoryBuffer.deviceMemory,
+      //          nullptr); vkDestroyBuffer(device->getDevice(),
+      //          memoryBuffer.buffer, nullptr);
+      //        }
+      //      }
     }
   }
 }
@@ -289,7 +291,7 @@ void VulkanInvocation::run() {
   if (device->getTimestampValidBits()) {
     getQueryPoolResults();
   }
-//  updateHostMemoryBuffers();
+  //  updateHostMemoryBuffers();
 }
 
 void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer buffer) {
@@ -763,10 +765,9 @@ void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
   void *payload;
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
-  auto deviceMemoryBuffer =vulkanDeviceMemoryBuffer.deviceMemory;
+  auto deviceMemoryBuffer = vulkanDeviceMemoryBuffer.deviceMemory;
   auto bufferSize = vulkanDeviceMemoryBuffer.bufferSize;
-  throwOnVulkanError(vkMapMemory(device->getDevice(),
-                                 deviceMemoryBuffer, 0,
+  throwOnVulkanError(vkMapMemory(device->getDevice(), deviceMemoryBuffer, 0,
                                  bufferSize, 0,
                                  reinterpret_cast<void **>(&payload)),
                      "vkMapMemory");
@@ -778,18 +779,27 @@ void VulkanInvocation::copyHostBufferToDevice(void *srcPtr,
                                               void *deviceBuffer) {
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
-  auto deviceMemoryBuffer =vulkanDeviceMemoryBuffer.deviceMemory;
+  auto deviceMemoryBuffer = vulkanDeviceMemoryBuffer.deviceMemory;
   auto bufferSize = vulkanDeviceMemoryBuffer.bufferSize;
 
   void *payload;
-  throwOnVulkanError(vkMapMemory(device->getDevice(), deviceMemoryBuffer,
-                                 0, bufferSize, 0,
+  throwOnVulkanError(vkMapMemory(device->getDevice(), deviceMemoryBuffer, 0,
+                                 bufferSize, 0,
                                  reinterpret_cast<void **>(&payload)),
                      "vkMapMemory");
 
   // Copy host memory into the mapped area.
   std::memcpy(payload, srcPtr, bufferSize);
   vkUnmapMemory(device->getDevice(), deviceMemoryBuffer);
+}
+
+void VulkanInvocation::deallocDeviceBuffer(void *buffer) {
+  auto vulkanDeviceMemoryBuffer =
+      static_cast<vulkanBuffer *>(buffer)->devBuffer;
+  vkFreeMemory(device->getDevice(), vulkanDeviceMemoryBuffer.deviceMemory,
+               nullptr);
+  vkDestroyBuffer(device->getDevice(), vulkanDeviceMemoryBuffer.buffer,
+                  nullptr);
 }
 
 } // namespace pmlc::rt::vulkan

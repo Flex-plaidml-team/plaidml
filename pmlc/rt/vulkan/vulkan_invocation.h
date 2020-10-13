@@ -166,6 +166,9 @@ public:
   vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);
+  void deallocDeviceBuffer(void *buffer);
+
+private:
 
   /// Sets needed data for Vulkan device.
   void setResourceData(const DescriptorSetIndex desIndex,
@@ -179,23 +182,21 @@ public:
                                         VkBufferUsageFlagBits &bufferUsage);
 
   void checkResourceData();
+    void createMemoryBuffers();
+    void createQueryPool();
+    void createShaderModule();
+    void initDescriptorSetLayoutBindingMap();
+    void createDescriptorSetLayout();
+    void createPipelineLayout();
+    void createComputePipeline(uint32_t subgroupSize);
+    void createDescriptorPool();
+    void allocateDescriptorSets();
+    void setWriteDescriptors();
+    void createSchedule();
+    void getQueryPoolResults();
+    void submitCommandBuffersToQueue();
 
-  void createMemoryBuffers();
-  void createQueryPool();
-  void createShaderModule();
-  void initDescriptorSetLayoutBindingMap();
-  void createDescriptorSetLayout();
-  void createPipelineLayout();
-  void createComputePipeline(uint32_t subgroupSize);
-  void createDescriptorPool();
-  void allocateDescriptorSets();
-  void setWriteDescriptors();
-  void createSchedule();
-  void getQueryPoolResults();
-  void submitCommandBuffersToQueue();
   void updateHostMemoryBuffers();
-
-private:
   std::vector<ActionPtr> schedule;
   std::shared_ptr<LaunchKernelAction> curr;
   std::vector<vulkanBuffer> deviceBufferPool;
