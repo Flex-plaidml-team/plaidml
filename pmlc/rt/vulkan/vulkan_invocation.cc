@@ -542,10 +542,11 @@ void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
     const auto &deviceMemoryBuffers = deviceMemoryBufferMapPair.second;
     const auto descriptorSetIndex = deviceMemoryBufferMapPair.first;
 
+    int bindingIndex = 0; /*index of all buffer for this launch action*/
     // Create a layout binding for each descriptor.
     for (const auto &memBuffer : deviceMemoryBuffers) {
       VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
-      descriptorSetLayoutBinding.binding = memBuffer.bindingIndex;
+      descriptorSetLayoutBinding.binding = bindingIndex++;
       descriptorSetLayoutBinding.descriptorType = memBuffer.descriptorType;
       descriptorSetLayoutBinding.descriptorCount = 1;
       descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
