@@ -485,7 +485,6 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   for (unsigned argI = 0; argI < launchOp.getNumKernelOperands(); ++argI) {
     mlir::Value remappedArg =
         rewriter.getRemappedValue(launchOp.getKernelOperand(argI));
-    remappedArg.dump();
     bufferOperands.push_back(remappedArg);
   }
 

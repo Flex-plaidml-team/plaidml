@@ -164,6 +164,8 @@ public:
 
   void allocNewBuffer(vulkanBuffer buffer);
   vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
+  void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
+  void copyHostBufferToDevice();
 
   /// Sets needed data for Vulkan device.
   void setResourceData(const DescriptorSetIndex desIndex,

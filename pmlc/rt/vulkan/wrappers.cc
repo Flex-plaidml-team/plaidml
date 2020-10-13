@@ -105,10 +105,12 @@ void VkWait(uint32_t count, ...) {}
 void VkDealloc(void *invocation, void *memory) {}
 
 void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) {
+  static_cast<VulkanInvocation *>(invocation)->copyDeviceBufferToHost(dst, src);
   return nullptr;
 }
 
 void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) {
+  static_cast<VulkanInvocation *>(invocation)
   return nullptr;
 }
 
