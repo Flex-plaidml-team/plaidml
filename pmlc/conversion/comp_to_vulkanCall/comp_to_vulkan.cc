@@ -282,11 +282,44 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkBarrier,
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr, llvmInt32},
+          /*isVarArg=*/true));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkWait,
+      LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt32},
+          /*isVarArg=*/true));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkWrite,
+      LLVM::LLVMType::getFunctionTy(
+          llvmInt8Ptr, {llvmInt8Ptr, llvmInt8Ptr, llvmInt8Ptr, llvmInt32},
+          /*isVarArg=*/true));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkRead,
+      LLVM::LLVMType::getFunctionTy(
+          llvmInt8Ptr, {llvmInt8Ptr, llvmInt8Ptr, llvmInt8Ptr, llvmInt32},
+          /*isVarArg=*/true));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkDealloc,
+      LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr, llvmInt8Ptr},
+          /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
       loc, kCreateVulkanMemoryTransferAction,
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt64Type, llvmInt64Type,
                                      llvmInt64Type, llvmInt64Type},
                                     /*isVarArg=*/false));
+
+  builder.create<LLVM::LLVMFuncOp>(
+      loc, kVkAlloc,
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr,
+                                    {llvmInt8Ptr, llvmInt32, llvmInt8Ptr},
+          /*isVarArg=*/false));
 
   std::vector<std::pair<const char *, mlir::Type>> bindType{
       {kBindBufferBFloat16, builder.getBF16Type()},
