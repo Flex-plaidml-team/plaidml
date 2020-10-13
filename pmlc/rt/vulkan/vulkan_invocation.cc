@@ -774,4 +774,22 @@ void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
   vkUnmapMemory(device->getDevice(), deviceMemoryBuffer);
 }
 
+void VulkanInvocation::copyHostBufferToDevice(void *srcPtr,
+                                              void *deviceBuffer) {
+  auto vulkanDeviceMemoryBuffer =
+      static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
+  auto deviceMemoryBuffer =vulkanDeviceMemoryBuffer.deviceMemory;
+  auto bufferSize = vulkanDeviceMemoryBuffer.bufferSize;
+
+  void *payload;
+  throwOnVulkanError(vkMapMemory(device->getDevice(), deviceMemoryBuffer,
+                                 0, bufferSize, 0,
+                                 reinterpret_cast<void **>(&payload)),
+                     "vkMapMemory");
+
+  // Copy host memory into the mapped area.
+  std::memcpy(payload, srcPtr, bufferSize);
+  vkUnmapMemory(device->getDevice(), deviceMemoryBuffer);
+}
+
 } // namespace pmlc::rt::vulkan

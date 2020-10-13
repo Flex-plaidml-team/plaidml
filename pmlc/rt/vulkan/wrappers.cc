@@ -110,7 +110,7 @@ void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) {
 }
 
 void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) {
-  static_cast<VulkanInvocation *>(invocation)
+  static_cast<VulkanInvocation *>(invocation)->copyHostBufferToDevice(src, dst);
   return nullptr;
 }
 
