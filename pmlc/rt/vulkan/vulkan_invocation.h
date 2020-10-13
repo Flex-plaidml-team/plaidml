@@ -44,10 +44,10 @@ struct VulkanHostMemoryBuffer {
 /// Struct contianing information regarding alloc buffer memory.
 
 struct vulkanBuffer {
-    VulkanDeviceMemoryBuffer devBuffer;
-    VulkanHostMemoryBuffer HostBuffer;
-    mlir::spirv::StorageClass spirvBuffer;
-    DescriptorSetIndex setIndex;
+  VulkanDeviceMemoryBuffer devBuffer;
+  VulkanHostMemoryBuffer HostBuffer;
+  mlir::spirv::StorageClass spirvBuffer;
+  DescriptorSetIndex setIndex;
 };
 
 /// Struct containing the number of local workgroups to dispatch for each
@@ -122,13 +122,6 @@ struct LaunchKernelAction : Action {
   uint8_t *binary{nullptr};
   uint32_t binarySize{0};
 
-  //===--------------------------------------------------------------------===//
-  // Vulkan resource data and storage classes.
-  //===--------------------------------------------------------------------===//
-
-  ResourceData resourceData;
-  ResourceStorageClassBindingMap resourceStorageClassData;
-
   llvm::SmallVector<VkBufferMemoryBarrier, 4> deps;
 };
 
@@ -169,12 +162,6 @@ public:
   void deallocDeviceBuffer(void *buffer);
 
 private:
-
-  /// Sets needed data for Vulkan device.
-  void setResourceData(const DescriptorSetIndex desIndex,
-                       const BindingIndex bindIndex,
-                       const VulkanHostMemoryBuffer &hostMemBuffer);
-
   void mapStorageClassToDescriptorType(mlir::spirv::StorageClass storageClass,
                                        VkDescriptorType &descriptorType);
 
@@ -182,21 +169,19 @@ private:
                                         VkBufferUsageFlagBits &bufferUsage);
 
   void checkResourceData();
-    void createMemoryBuffers();
-    void createQueryPool();
-    void createShaderModule();
-    void initDescriptorSetLayoutBindingMap();
-    void createDescriptorSetLayout();
-    void createPipelineLayout();
-    void createComputePipeline(uint32_t subgroupSize);
-    void createDescriptorPool();
-    void allocateDescriptorSets();
-    void setWriteDescriptors();
-    void createSchedule();
-    void getQueryPoolResults();
-    void submitCommandBuffersToQueue();
+  void createQueryPool();
+  void createShaderModule();
+  void initDescriptorSetLayoutBindingMap();
+  void createDescriptorSetLayout();
+  void createPipelineLayout();
+  void createComputePipeline(uint32_t subgroupSize);
+  void createDescriptorPool();
+  void allocateDescriptorSets();
+  void setWriteDescriptors();
+  void createSchedule();
+  void getQueryPoolResults();
+  void submitCommandBuffersToQueue();
 
-  void updateHostMemoryBuffers();
   std::vector<ActionPtr> schedule;
   std::shared_ptr<LaunchKernelAction> curr;
   std::vector<vulkanBuffer> deviceBufferPool;

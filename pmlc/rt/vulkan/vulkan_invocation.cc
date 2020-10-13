@@ -117,10 +117,8 @@ void VulkanInvocation::setLaunchKernelAction(uint32_t subgroupSize) {
   if (!curr) {
     throw std::runtime_error{"current LaunchKernelAction has not been created"};
   }
-
   // Create logical device, shader module and memory buffers.
   checkResourceData();
-  //  createMemoryBuffers();
   createShaderModule();
 
   // Descriptor bindings divided into sets. Each descriptor binding
@@ -298,18 +296,6 @@ void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer buffer) {
   deviceBufferPool.push_back(buffer);
 }
 
-void VulkanInvocation::setResourceData(
-    const DescriptorSetIndex desIndex, const BindingIndex bindIndex,
-    const VulkanHostMemoryBuffer &hostMemBuffer) {
-  if (!curr) {
-    throw std::runtime_error{
-        "setResourceData: current LaunchKernelAction has not been created"};
-  }
-  curr->resourceData[desIndex][bindIndex] = hostMemBuffer;
-  curr->resourceStorageClassData[desIndex][bindIndex] =
-      mlir::spirv::StorageClass::StorageBuffer;
-}
-
 void VulkanInvocation::mapStorageClassToDescriptorType(
     mlir::spirv::StorageClass storageClass, VkDescriptorType &descriptorType) {
   switch (storageClass) {
@@ -340,9 +326,6 @@ void VulkanInvocation::mapStorageClassToBufferUsageFlag(
 }
 
 void VulkanInvocation::checkResourceData() {
-  if (!curr->resourceData.size()) {
-    throw std::runtime_error{"Vulkan device needs at least one resource"};
-  }
   if (!curr->binarySize || !curr->binary) {
     throw std::runtime_error{"binary shader size must be greater than zero"};
   }
@@ -549,6 +532,7 @@ void VulkanInvocation::createComputePipeline(uint32_t subgroupSize) {
                                               &computePipelineCreateInfo, 0,
                                               &curr->pipeline),
                      "vkCreateComputePipelines");
+  IVLOG(1, "Debug check point!!!");
 }
 
 void VulkanInvocation::createDescriptorPool() {
@@ -733,33 +717,6 @@ void VulkanInvocation::submitCommandBuffersToQueue() {
                      "vkQueueSubmit");
 }
 
-void VulkanInvocation::updateHostMemoryBuffers() {
-  for (const auto &action : schedule) {
-    if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
-      // For each descriptor set.
-      for (auto &resourceDataMapPair : kernel->resourceData) {
-        auto &resourceDataMap = resourceDataMapPair.second;
-        auto &deviceMemoryBuffers =
-            kernel->deviceMemoryBufferMap[resourceDataMapPair.first];
-        // For each device memory buffer in the set.
-        for (auto &deviceMemoryBuffer : deviceMemoryBuffers) {
-          if (resourceDataMap.count(deviceMemoryBuffer.bindingIndex)) {
-            void *payload;
-            auto &hostMemoryBuffer =
-                resourceDataMap[deviceMemoryBuffer.bindingIndex];
-            throwOnVulkanError(vkMapMemory(device->getDevice(),
-                                           deviceMemoryBuffer.deviceMemory, 0,
-                                           hostMemoryBuffer.size, 0,
-                                           reinterpret_cast<void **>(&payload)),
-                               "vkMapMemory");
-            std::memcpy(hostMemoryBuffer.ptr, payload, hostMemoryBuffer.size);
-            vkUnmapMemory(device->getDevice(), deviceMemoryBuffer.deviceMemory);
-          }
-        }
-      }
-    }
-  }
-}
 void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
                                               void *deviceBuffer) {
   void *payload;
