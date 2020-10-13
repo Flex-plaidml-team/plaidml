@@ -253,8 +253,8 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt8Ptr, llvmInt32,
                                      llvmInt8Ptr, llvmInt32, llvmInt32,
-                                     llvmInt32},
-                                    /*isVarArg=*/false));
+                                     llvmInt32, llvmInt32},
+                                    /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kSetVulkanLaunchKernelAction,
@@ -457,33 +457,53 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
     return mlir::failure();
   }
 
+  // containing all the args for kCreateVulkanLaunchKernelAction.
+  std::vector<mlir::Value> createActionOperands{operands[0]};
   mlir::Value binaryPtr, binaryBytes;
   getPtrToBinaryModule(rewriter, loc, modulesMap.at(binaryName), binaryPtr,
                        binaryBytes);
+  createActionOperands.push_back(binaryPtr);
+  createActionOperands.push_back(binaryBytes);
   mlir::Value namePtr = getPtrToGlobalString(
       rewriter, loc, modulesMap.at(binaryName).kernelsNameMap.at(kernelName));
-
-  LLVM::LLVMType llvmInt32 = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+  createActionOperands.push_back(namePtr);
+  LLVM::LLVMType llvmInt32Type =
+      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
   auto gSize = launchOp.getGridSizeOperandValues();
   auto x = gSize.x.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
   auto y = gSize.y.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
   auto z = gSize.z.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
-  mlir::Value gx = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, x);
-  mlir::Value gy = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, y);
-  mlir::Value gz = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32, z);
+  mlir::Value gx = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32Type, x);
+  mlir::Value gy = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32Type, y);
+  mlir::Value gz = rewriter.create<LLVM::ConstantOp>(loc, llvmInt32Type, z);
+  createActionOperands.push_back(gx);
+  createActionOperands.push_back(gy);
+  createActionOperands.push_back(gz);
 
+  // transform mapped vulkan buffer to launch kernel.
+  std::vector<mlir::Value> bufferOperands;
+  for (unsigned argI = 0; argI < launchOp.getNumKernelOperands(); ++argI) {
+    mlir::Value remappedArg =
+        rewriter.getRemappedValue(launchOp.getKernelOperand(argI));
+    remappedArg.dump();
+    bufferOperands.push_back(remappedArg);
+  }
+
+  mlir::Value bufferNum = rewriter.create<LLVM::ConstantOp>(
+      loc, llvmInt32Type, rewriter.getI32IntegerAttr(bufferOperands.size()));
+  createActionOperands.push_back(bufferNum);
+
+  createActionOperands.insert(createActionOperands.end(),
+                              bufferOperands.begin(), bufferOperands.end());
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
-      mlir::ArrayRef<mlir::Value>{operands[0], binaryPtr, binaryBytes, namePtr,
-                                  gx, gy, gz});
+      createActionOperands);
 
-  LLVM::LLVMType llvmInt32Ty =
-      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
   // Set kernel arguments.
   for (unsigned argI = 0; argI < launchOp.getNumKernelOperands(); ++argI) {
     mlir::Value subgroupSizeVal = rewriter.create<LLVM::ConstantOp>(
-        loc, llvmInt32Ty, rewriter.getI32IntegerAttr(1));
+        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
 
     rewriter.create<LLVM::CallOp>(
         loc, mlir::ArrayRef<mlir::Type>{},

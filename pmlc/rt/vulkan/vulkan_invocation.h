@@ -47,6 +47,7 @@ struct vulkanBuffer {
     VulkanDeviceMemoryBuffer devBuffer;
     VulkanHostMemoryBuffer HostBuffer;
     mlir::spirv::StorageClass spirvBuffer;
+    DescriptorSetIndex setIndex;
 };
 
 /// Struct containing the number of local workgroups to dispatch for each
@@ -147,7 +148,8 @@ public:
 
   void createLaunchKernelAction(uint8_t *shader, uint32_t size,
                                 const char *entryPoint,
-                                NumWorkGroups numWorkGroups);
+                                NumWorkGroups numWorkGroups,
+                                std::vector<vulkanBuffer *> buffers);
 
   void setLaunchKernelAction(uint32_t subgroupSize);
 

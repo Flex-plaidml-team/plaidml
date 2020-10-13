@@ -15,6 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cstdarg>
 #include <mutex>
 #include <numeric>
 
@@ -57,9 +58,17 @@ void deinitVulkan(void *vkInvocation) {
 
 void createVulkanLaunchKernelAction(void *vkInvocation, uint8_t *shader,
                                     uint32_t size, const char *entryPoint,
-                                    uint32_t x, uint32_t y, uint32_t z) {
+                                    uint32_t x, uint32_t y, uint32_t z,
+                                    uint32_t count, ...) {
+  std::vector<vulkanBuffer *> deviceBuffer;
+  va_list args;
+  va_start(args, count);
+  for (unsigned i = 0; i < count; ++i)
+    deviceBuffer.push_back(va_arg(args, vulkanBuffer *));
+  va_end(args);
   static_cast<VulkanInvocation *>(vkInvocation)
-      ->createLaunchKernelAction(shader, size, entryPoint, {x, y, z});
+      ->createLaunchKernelAction(shader, size, entryPoint, {x, y, z},
+                                 deviceBuffer);
 }
 
 void createVulkanMemoryTransferAction(void *vkInvocation, uint64_t src_index,
