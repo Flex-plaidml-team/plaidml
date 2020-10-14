@@ -532,21 +532,18 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       createActionOperands);
 
   // Set kernel arguments.
-  for (unsigned argI = 0; argI < launchOp.getNumKernelOperands(); ++argI) {
-    mlir::Value subgroupSizeVal = rewriter.create<LLVM::ConstantOp>(
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
+  mlir::Value subgroupSizeVal = rewriter.create<LLVM::ConstantOp>(
+      loc, llvmInt32Type, rewriter.getI32IntegerAttr(1));
 
-    rewriter.create<LLVM::CallOp>(
-        loc, mlir::ArrayRef<mlir::Type>{},
-        rewriter.getSymbolRefAttr(kSetVulkanLaunchKernelAction),
-        mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
-  }
+  rewriter.create<LLVM::CallOp>(
+      loc, mlir::ArrayRef<mlir::Type>{},
+      rewriter.getSymbolRefAttr(kSetVulkanLaunchKernelAction),
+      mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
 
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
       mlir::ArrayRef<mlir::Value>{operands[0]});
-  //  }
 
   mlir::Type llvmEventType = this->convertType(op.getType());
   rewriter.replaceOpWithNewOp<LLVM::CallOp>(
