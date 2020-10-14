@@ -155,7 +155,7 @@ public:
 
   void run();
 
-  void allocNewBuffer(vulkanBuffer buffer);
+  void allocNewBuffer(vulkanBuffer &buffer);
   vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);

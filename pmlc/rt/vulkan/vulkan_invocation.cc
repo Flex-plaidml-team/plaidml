@@ -280,7 +280,7 @@ void VulkanInvocation::run() {
   //  updateHostMemoryBuffers();
 }
 
-void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer buffer) {
+void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer &buffer) {
   deviceBufferPool.push_back(buffer);
 }
 
