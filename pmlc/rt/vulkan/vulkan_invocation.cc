@@ -129,91 +129,91 @@ void VulkanInvocation::addLaunchActionToSchedule() {
   curr = nullptr;
 }
 
-void VulkanInvocation::createMemoryTransferAction(VkBuffer src, VkBuffer dst,
-                                                  size_t size) {
-  auto transferAction = std::make_shared<MemoryTransferAction>();
-  transferAction->src = src;
-  transferAction->dst = dst;
-  const VkBufferCopy copy = {0, 0, size};
-  transferAction->regions.push_back(copy);
+//void VulkanInvocation::createMemoryTransferAction(VkBuffer src, VkBuffer dst,
+//                                                  size_t size) {
+//  auto transferAction = std::make_shared<MemoryTransferAction>();
+//  transferAction->src = src;
+//  transferAction->dst = dst;
+//  const VkBufferCopy copy = {0, 0, size};
+//  transferAction->regions.push_back(copy);
+//
+//  schedule.push_back(transferAction);
+//}
 
-  schedule.push_back(transferAction);
-}
-
-void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
-                                                  uint64_t src_binding,
-                                                  uint64_t dst_index,
-                                                  uint64_t dst_binding) {
-  std::shared_ptr<LaunchKernelAction> kernel_src;
-  std::shared_ptr<LaunchKernelAction> kernel_dst;
-  uint64_t kernel_index = 0;
-  for (auto action : schedule) {
-    if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
-      if (src_index == kernel_index) {
-        kernel_src = kernel;
-      }
-      if (dst_index == kernel_index) {
-        kernel_dst = kernel;
-      }
-      kernel_index++;
-    }
-  }
-
-  if (kernel_index == dst_index) {
-    kernel_dst = curr;
-  }
-  if (kernel_index == src_index) {
-    kernel_src = curr;
-  }
-
-  if ((!kernel_src) || (!kernel_dst)) {
-    throw std::runtime_error{
-        "createMemoryTransferAction: invalid kernel index"};
-  }
-
-  auto descriptorSetIndex = 0;
-  auto memoryBuffersSrc = kernel_src->deviceMemoryBufferMap[descriptorSetIndex];
-  auto memoryBuffersDst = kernel_dst->deviceMemoryBufferMap[descriptorSetIndex];
-
-  VkBuffer bufferSrc{VK_NULL_HANDLE};
-  VkBuffer bufferDst{VK_NULL_HANDLE};
-  size_t bufferSizeSrc = 0;
-  size_t bufferSizeDst = 0;
-
-  for (auto memoryBuffer : memoryBuffersSrc) {
-    if (memoryBuffer.bindingIndex == src_binding) {
-      bufferSrc = memoryBuffer.buffer;
-      bufferSizeSrc = memoryBuffer.bufferSize;
-    }
-  }
-
-  for (auto memoryBuffer : memoryBuffersDst) {
-    if (memoryBuffer.bindingIndex == dst_binding) {
-      bufferDst = memoryBuffer.buffer;
-      bufferSizeDst = memoryBuffer.bufferSize;
-    }
-  }
-
-  if (bufferSizeSrc != bufferSizeDst) {
-    throw std::runtime_error{
-        "createMemoryTransferAction: different buffer sizes!"};
-  }
-
-  createMemoryTransferAction(bufferSrc, bufferDst, bufferSizeDst);
-
-  VkBufferMemoryBarrier bufferMemoryBarrier = {};
-  bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-  bufferMemoryBarrier.pNext = nullptr;
-  bufferMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  bufferMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-  bufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  bufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  bufferMemoryBarrier.buffer = bufferDst;
-  bufferMemoryBarrier.offset = 0;
-  bufferMemoryBarrier.size = VK_WHOLE_SIZE;
-
-  kernel_dst->deps.push_back(bufferMemoryBarrier);
-}
+//void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
+//                                                  uint64_t src_binding,
+//                                                  uint64_t dst_index,
+//                                                  uint64_t dst_binding) {
+//  std::shared_ptr<LaunchKernelAction> kernel_src;
+//  std::shared_ptr<LaunchKernelAction> kernel_dst;
+//  uint64_t kernel_index = 0;
+//  for (auto action : schedule) {
+//    if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
+//      if (src_index == kernel_index) {
+//        kernel_src = kernel;
+//      }
+//      if (dst_index == kernel_index) {
+//        kernel_dst = kernel;
+//      }
+//      kernel_index++;
+//    }
+//  }
+//
+//  if (kernel_index == dst_index) {
+//    kernel_dst = curr;
+//  }
+//  if (kernel_index == src_index) {
+//    kernel_src = curr;
+//  }
+//
+//  if ((!kernel_src) || (!kernel_dst)) {
+//    throw std::runtime_error{
+//        "createMemoryTransferAction: invalid kernel index"};
+//  }
+//
+//  auto descriptorSetIndex = 0;
+//  auto memoryBuffersSrc = kernel_src->deviceMemoryBufferMap[descriptorSetIndex];
+//  auto memoryBuffersDst = kernel_dst->deviceMemoryBufferMap[descriptorSetIndex];
+//
+//  VkBuffer bufferSrc{VK_NULL_HANDLE};
+//  VkBuffer bufferDst{VK_NULL_HANDLE};
+//  size_t bufferSizeSrc = 0;
+//  size_t bufferSizeDst = 0;
+//
+//  for (auto memoryBuffer : memoryBuffersSrc) {
+//    if (memoryBuffer.bindingIndex == src_binding) {
+//      bufferSrc = memoryBuffer.buffer;
+//      bufferSizeSrc = memoryBuffer.bufferSize;
+//    }
+//  }
+//
+//  for (auto memoryBuffer : memoryBuffersDst) {
+//    if (memoryBuffer.bindingIndex == dst_binding) {
+//      bufferDst = memoryBuffer.buffer;
+//      bufferSizeDst = memoryBuffer.bufferSize;
+//    }
+//  }
+//
+//  if (bufferSizeSrc != bufferSizeDst) {
+//    throw std::runtime_error{
+//        "createMemoryTransferAction: different buffer sizes!"};
+//  }
+//
+//  createMemoryTransferAction(bufferSrc, bufferDst, bufferSizeDst);
+//
+//  VkBufferMemoryBarrier bufferMemoryBarrier = {};
+//  bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+//  bufferMemoryBarrier.pNext = nullptr;
+//  bufferMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+//  bufferMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+//  bufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//  bufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//  bufferMemoryBarrier.buffer = bufferDst;
+//  bufferMemoryBarrier.offset = 0;
+//  bufferMemoryBarrier.size = VK_WHOLE_SIZE;
+//
+//  kernel_dst->deps.push_back(bufferMemoryBarrier);
+//}
 
 void VulkanInvocation::getQueryPoolResults() {
   using fp_milliseconds =
@@ -280,7 +280,7 @@ void VulkanInvocation::run() {
   //  updateHostMemoryBuffers();
 }
 
-void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer &buffer) {
+void VulkanInvocation::allocNewBuffer(pmlc::rt::vulkan::vulkanBuffer buffer) {
   deviceBufferPool.push_back(buffer);
 }
 
@@ -576,6 +576,7 @@ void VulkanInvocation::setWriteDescriptors() {
     // For each device memory buffer in the descriptor set.
     const auto &deviceMemoryBuffers =
         curr->deviceMemoryBufferMap[descriptorSetInfo.descriptorSet];
+    unsigned bindindex = 0;
     for (const auto &memoryBuffer : deviceMemoryBuffers) {
       // Structure describing descriptor sets to write to.
       VkWriteDescriptorSet wSet = {};
@@ -583,7 +584,7 @@ void VulkanInvocation::setWriteDescriptors() {
       wSet.pNext = nullptr;
       // Descriptor set.
       wSet.dstSet = *descriptorSetIt;
-      wSet.dstBinding = memoryBuffer.bindingIndex;
+      wSet.dstBinding = bindindex++;
       wSet.dstArrayElement = 0;
       wSet.descriptorCount = 1;
       wSet.descriptorType = memoryBuffer.descriptorType;

@@ -74,9 +74,9 @@ void createVulkanLaunchKernelAction(void *vkInvocation, uint8_t *shader,
 void createVulkanMemoryTransferAction(void *vkInvocation, uint64_t src_index,
                                       uint64_t src_binding, uint64_t dst_index,
                                       uint64_t dst_binding) {
-  static_cast<VulkanInvocation *>(vkInvocation)
-      ->createMemoryTransferAction(src_index, src_binding, dst_index,
-                                   dst_binding);
+//  static_cast<VulkanInvocation *>(vkInvocation)
+//      ->createMemoryTransferAction(src_index, src_binding, dst_index,
+//                                   dst_binding);
 }
 
 void setVulkanLaunchKernelAction(void *vkInvocation, uint32_t subgroupSize) {

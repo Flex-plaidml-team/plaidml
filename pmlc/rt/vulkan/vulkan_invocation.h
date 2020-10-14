@@ -25,7 +25,6 @@ using BindingIndex = uint32_t;
 
 /// Struct containing information regarding to a device memory buffer.
 struct VulkanDeviceMemoryBuffer {
-  BindingIndex bindingIndex{0};
   VkDescriptorType descriptorType{VK_DESCRIPTOR_TYPE_MAX_ENUM};
   VkDescriptorBufferInfo bufferInfo{};
   VkBuffer buffer{VK_NULL_HANDLE};
@@ -148,14 +147,14 @@ public:
 
   void addLaunchActionToSchedule();
 
-  void createMemoryTransferAction(uint64_t src_index, uint64_t src_binding,
-                                  uint64_t dst_index, uint64_t dst_binding);
-
-  void createMemoryTransferAction(VkBuffer src, VkBuffer dst, size_t size);
+//  void createMemoryTransferAction(uint64_t src_index, uint64_t src_binding,
+//                                  uint64_t dst_index, uint64_t dst_binding);
+//
+//  void createMemoryTransferAction(VkBuffer src, VkBuffer dst, size_t size);
 
   void run();
 
-  void allocNewBuffer(vulkanBuffer &buffer);
+  void allocNewBuffer(vulkanBuffer buffer);
   vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);
