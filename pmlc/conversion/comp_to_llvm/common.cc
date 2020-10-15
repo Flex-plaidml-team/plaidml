@@ -45,14 +45,22 @@ mlir::LogicalResult serializeSpirvKernels(mlir::ModuleOp &op,
         std::string binaryName = kSpirvBinPrefix + gpuModuleName;
 
         // Serialize spirv module.
+        /*
         mlir::SmallVector<uint32_t, 0> moduleBinary;
         if (mlir::failed(spirv::serialize(moduleOp, moduleBinary)))
           return mlir::WalkResult::interrupt();
+*/
+        FILE *fp2 = fopen("/home/yangleiz/flex_plaidml/plaidml/file.bin", "rb");
+        char data0[1220];
+        auto size0 = fread(data0, 1220, 1, fp2);
+        fclose(fp2);
+
+        printf("size0=%lu\n", size0);
+        printf("data0=%s\n", data0);
 
         LLVM::GlobalOp binaryOp =
             addGlobalString(builder, moduleOp.getLoc(), binaryName,
-                            {reinterpret_cast<char *>(moduleBinary.data()),
-                             moduleBinary.size() * 4});
+                            {reinterpret_cast<char *>(data0), 1220});
         std::map<std::string, LLVM::GlobalOp> kernelNames;
         gpuModule.walk([&](gpu::GPUFuncOp funcOp) {
           if (!funcOp.isKernel())
@@ -68,7 +76,7 @@ mlir::LogicalResult serializeSpirvKernels(mlir::ModuleOp &op,
           kernelNames[kernelName] = globalKernelName;
         });
         // Update modules map.
-        map[gpuModuleName] = {binaryOp, moduleBinary.size() * 4, kernelNames};
+        map[gpuModuleName] = {binaryOp, 1220, kernelNames};
 
         // Add spirv and gpu modules to erase list.
         toErase.push_back(moduleOp.getOperation());

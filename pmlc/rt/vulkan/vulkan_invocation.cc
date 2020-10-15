@@ -24,7 +24,6 @@ namespace pmlc::rt::vulkan {
 
 VulkanInvocation::VulkanInvocation(VulkanDevice *device)
     : device{device->shared_from_this()} {
-  IVLOG(1, "DBG----- start VulkanInvocation\n");
   createQueryPool();
 }
 
@@ -99,8 +98,6 @@ void VulkanInvocation::createQueryPool() {
 void VulkanInvocation::createLaunchKernelAction(uint8_t *shader, uint32_t size,
                                                 const char *entryPoint,
                                                 NumWorkGroups numWorkGroups) {
-  // curr = std::make_shared<LaunchKernelAction>();
-  IVLOG(1, "DBG----- start createLaunchKernelAction()\n");
   curr->binary = shader;
   curr->binarySize = size;
   curr->entryPoint = entryPoint;
@@ -111,7 +108,6 @@ void VulkanInvocation::setLaunchKernelAction(uint32_t subgroupSize) {
   if (!curr) {
     throw std::runtime_error{"current LaunchKernelAction has not been created"};
   }
-  IVLOG(1, "DBG----- start setLaunchKernelAction() A\n");
   // Create logical device, shader module and memory buffers.
   checkResourceData();
   createMemoryBuffers();
@@ -123,14 +119,11 @@ void VulkanInvocation::setLaunchKernelAction(uint32_t subgroupSize) {
   initDescriptorSetLayoutBindingMap();
   createDescriptorSetLayout();
   createPipelineLayout();
-  IVLOG(1, "DBG----- start setLaunchKernelAction() B\n");
   createComputePipeline(subgroupSize);
-  IVLOG(1, "DBG----- start setLaunchKernelAction() C\n");
   // Each descriptor set must be allocated from a descriptor pool.
   createDescriptorPool();
   allocateDescriptorSets();
   setWriteDescriptors();
-  IVLOG(1, "DBG----- finish setLaunchKernelAction()\n");
 }
 
 void VulkanInvocation::addLaunchActionToSchedule() {
@@ -279,7 +272,6 @@ void VulkanInvocation::getQueryPoolResults() {
 }
 
 void VulkanInvocation::run() {
-  IVLOG(1, "DBG----- start run()\n");
   createSchedule();
   submitCommandBuffersToQueue();
   throwOnVulkanError(vkQueueWaitIdle(device->getQueue()), "vkQueueWaitIdle");
@@ -288,12 +280,10 @@ void VulkanInvocation::run() {
     getQueryPoolResults();
   }
   updateHostMemoryBuffers();
-  IVLOG(1, "DBG----- finish run()\n");
 }
 
 void VulkanInvocation::setResourceData(
     const VulkanHostMemoryBuffer &hostMemBuffer) {
-  IVLOG(1, "DBG----- start setResourceData()\n");
   if (!curr) {
     curr = std::make_shared<LaunchKernelAction>();
   }
