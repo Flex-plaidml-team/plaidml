@@ -19,12 +19,11 @@ def GpuKernelOutliningPass : Pass<"pmlc-kernel_outlining", "mlir::ModuleOp"> {
 
 def HostOpsToGPUKernelPass : Pass<"pmlc-host-ops-to-kernel", "mlir::ModuleOp"> {
   let summary = "Construct new gpu.modules for operations defined between gpu.modules";
-  let constructor = "";
+  let constructor = "pmlc::conversion::gpu::createHostOpsToGPUKernelPass()";
   let dependentDialects = [
-    "mlir::scf::SCFDialect",
     "mlir::gpu::GPUDialect",
     "mlir::spirv::SPIRVDialect",
   ];
-};
+}
 
 #endif // __PMLC_CONVERSION_GPU_TO_VULKAN_PASSES__
