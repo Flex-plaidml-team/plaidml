@@ -129,92 +129,6 @@ void VulkanInvocation::addLaunchActionToSchedule() {
   curr = nullptr;
 }
 
-//void VulkanInvocation::createMemoryTransferAction(VkBuffer src, VkBuffer dst,
-//                                                  size_t size) {
-//  auto transferAction = std::make_shared<MemoryTransferAction>();
-//  transferAction->src = src;
-//  transferAction->dst = dst;
-//  const VkBufferCopy copy = {0, 0, size};
-//  transferAction->regions.push_back(copy);
-//
-//  schedule.push_back(transferAction);
-//}
-
-//void VulkanInvocation::createMemoryTransferAction(uint64_t src_index,
-//                                                  uint64_t src_binding,
-//                                                  uint64_t dst_index,
-//                                                  uint64_t dst_binding) {
-//  std::shared_ptr<LaunchKernelAction> kernel_src;
-//  std::shared_ptr<LaunchKernelAction> kernel_dst;
-//  uint64_t kernel_index = 0;
-//  for (auto action : schedule) {
-//    if (auto kernel = std::dynamic_pointer_cast<LaunchKernelAction>(action)) {
-//      if (src_index == kernel_index) {
-//        kernel_src = kernel;
-//      }
-//      if (dst_index == kernel_index) {
-//        kernel_dst = kernel;
-//      }
-//      kernel_index++;
-//    }
-//  }
-//
-//  if (kernel_index == dst_index) {
-//    kernel_dst = curr;
-//  }
-//  if (kernel_index == src_index) {
-//    kernel_src = curr;
-//  }
-//
-//  if ((!kernel_src) || (!kernel_dst)) {
-//    throw std::runtime_error{
-//        "createMemoryTransferAction: invalid kernel index"};
-//  }
-//
-//  auto descriptorSetIndex = 0;
-//  auto memoryBuffersSrc = kernel_src->deviceMemoryBufferMap[descriptorSetIndex];
-//  auto memoryBuffersDst = kernel_dst->deviceMemoryBufferMap[descriptorSetIndex];
-//
-//  VkBuffer bufferSrc{VK_NULL_HANDLE};
-//  VkBuffer bufferDst{VK_NULL_HANDLE};
-//  size_t bufferSizeSrc = 0;
-//  size_t bufferSizeDst = 0;
-//
-//  for (auto memoryBuffer : memoryBuffersSrc) {
-//    if (memoryBuffer.bindingIndex == src_binding) {
-//      bufferSrc = memoryBuffer.buffer;
-//      bufferSizeSrc = memoryBuffer.bufferSize;
-//    }
-//  }
-//
-//  for (auto memoryBuffer : memoryBuffersDst) {
-//    if (memoryBuffer.bindingIndex == dst_binding) {
-//      bufferDst = memoryBuffer.buffer;
-//      bufferSizeDst = memoryBuffer.bufferSize;
-//    }
-//  }
-//
-//  if (bufferSizeSrc != bufferSizeDst) {
-//    throw std::runtime_error{
-//        "createMemoryTransferAction: different buffer sizes!"};
-//  }
-//
-//  createMemoryTransferAction(bufferSrc, bufferDst, bufferSizeDst);
-//
-//  VkBufferMemoryBarrier bufferMemoryBarrier = {};
-//  bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-//  bufferMemoryBarrier.pNext = nullptr;
-//  bufferMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-//  bufferMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-//  bufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-//  bufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-//  bufferMemoryBarrier.buffer = bufferDst;
-//  bufferMemoryBarrier.offset = 0;
-//  bufferMemoryBarrier.size = VK_WHOLE_SIZE;
-//
-//  kernel_dst->deps.push_back(bufferMemoryBarrier);
-//}
-
 void VulkanInvocation::getQueryPoolResults() {
   using fp_milliseconds =
       std::chrono::duration<double, std::chrono::milliseconds::period>;
@@ -326,7 +240,7 @@ vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex) {
   VkBufferUsageFlagBits bufferUsageDst = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
   vulkanBuffer &bindVulkanBuffer = deviceBufferPool.back();
-  const auto resourceStorageClassBinding = bindVulkanBuffer.spirvBuffer;
+  const auto resourceStorageClassBinding = mlir::spirv::StorageClass::StorageBuffer;
 
   mapStorageClassToDescriptorType(resourceStorageClassBinding, descriptorType);
   mapStorageClassToBufferUsageFlag(resourceStorageClassBinding, bufferUsageSrc);
@@ -410,12 +324,11 @@ void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
     const auto &deviceMemoryBuffers = deviceMemoryBufferMapPair.second;
     const auto descriptorSetIndex = deviceMemoryBufferMapPair.first;
 
-    int bindingIndex = 0; /*index of all buffer for this launch action*/
     // Create a layout binding for each descriptor.
-    for (const auto &memBuffer : deviceMemoryBuffers) {
+    for (size_t i=0 ; i<deviceMemoryBuffers.size(); i++) {
       VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
-      descriptorSetLayoutBinding.binding = bindingIndex++;
-      descriptorSetLayoutBinding.descriptorType = memBuffer.descriptorType;
+      descriptorSetLayoutBinding.binding = i;
+      descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
       descriptorSetLayoutBinding.descriptorCount = 1;
       descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
       descriptorSetLayoutBinding.pImmutableSamplers = 0;

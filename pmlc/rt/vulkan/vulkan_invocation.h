@@ -45,7 +45,6 @@ struct VulkanHostMemoryBuffer {
 struct vulkanBuffer {
   VulkanDeviceMemoryBuffer devBuffer;
   VulkanHostMemoryBuffer HostBuffer;
-  mlir::spirv::StorageClass spirvBuffer;
   DescriptorSetIndex setIndex;
 };
 

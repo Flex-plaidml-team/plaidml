@@ -40,7 +40,6 @@ void bindBuffer(void *vkInvocation, uint32_t bufferByteSize,
   T *ptr = memRef.data + memRef.offset;
   VulkanHostMemoryBuffer memBuffer{ptr, bufferByteSize};
   newBuffer.HostBuffer = memBuffer;
-  newBuffer.spirvBuffer = mlir::spirv::StorageClass::StorageBuffer;
   static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
 }
 
