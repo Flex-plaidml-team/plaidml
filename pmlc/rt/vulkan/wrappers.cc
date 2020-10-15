@@ -32,14 +32,12 @@ namespace pmlc::rt::vulkan {
 namespace {
 
 template <typename T>
-void bindBuffer(void *vkInvocation, DescriptorSetIndex setIndex,
-                BindingIndex bindIndex, uint32_t bufferByteSize,
+void bindBuffer(void *vkInvocation, uint32_t bufferByteSize,
                 ::UnrankedMemRefType<T> *unrankedMemRef) {
   DynamicMemRefType<T> memRef(*unrankedMemRef);
   T *ptr = memRef.data + memRef.offset;
   VulkanHostMemoryBuffer memBuffer{ptr, bufferByteSize};
-  static_cast<VulkanInvocation *>(vkInvocation)
-      ->setResourceData(setIndex, bindIndex, memBuffer);
+  static_cast<VulkanInvocation *>(vkInvocation)->setResourceData(memBuffer);
 }
 
 } // namespace
@@ -82,12 +80,22 @@ void run(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 
+void VkBarrier() {}
+void VkWait() {}
+void *VkAlloc() { return nullptr; }
+void VkDealloc() {}
+void VkRead() {}
+void VkWrite() {}
+void VkScheduleFunc(void *vkInvocation) {
+  printf("DBG start VkScheduleFunc\n");
+  static_cast<VulkanInvocation *>(vkInvocation)->run();
+}
+
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
-      void *vkInvocation, DescriptorSetIndex setIndex, BindingIndex bindIndex, \
-      uint32_t bufferByteSize, ::UnrankedMemRefType<_type_> *unrankedMemRef) { \
-    bindBuffer(vkInvocation, setIndex, bindIndex, bufferByteSize,              \
-               unrankedMemRef);                                                \
+      void *vkInvocation, uint32_t bufferByteSize,                             \
+      ::UnrankedMemRefType<_type_> *unrankedMemRef) {                          \
+    bindBuffer(vkInvocation, bufferByteSize, unrankedMemRef);                  \
   }
 
 BIND_BUFFER_IMPL(Float16, half_float::half);
@@ -115,7 +123,7 @@ struct Registration {
     // Vulkan Runtime functions
     registerSymbol("initVulkan", reinterpret_cast<void *>(initVulkan));
     registerSymbol("deinitVulkan", reinterpret_cast<void *>(deinitVulkan));
-    registerSymbol("_mlir_ciface_createVulkanLaunchKernelAction",
+    registerSymbol("createVulkanLaunchKernelAction",
                    reinterpret_cast<void *>(createVulkanLaunchKernelAction));
     registerSymbol("createVulkanMemoryTransferAction",
                    reinterpret_cast<void *>(createVulkanMemoryTransferAction));
@@ -140,6 +148,13 @@ struct Registration {
                    reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger64));
     registerSymbol("_mlir_ciface_fillResourceFloat32",
                    reinterpret_cast<void *>(_mlir_ciface_fillResourceFloat32));
+    registerSymbol("VkBarrier", reinterpret_cast<void *>(VkBarrier));
+    registerSymbol("VkWait", reinterpret_cast<void *>(VkWait));
+    registerSymbol("VkAlloc", reinterpret_cast<void *>(VkAlloc));
+    registerSymbol("VkDealloc", reinterpret_cast<void *>(VkDealloc));
+    registerSymbol("VkRead", reinterpret_cast<void *>(VkRead));
+    registerSymbol("VkWrite", reinterpret_cast<void *>(VkWrite));
+    registerSymbol("VkScheduleFunc", reinterpret_cast<void *>(VkScheduleFunc));
   }
 };
 static Registration reg;
