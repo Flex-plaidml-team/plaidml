@@ -154,8 +154,8 @@ void pipelineBuilder(OpPassManager &pm) {
 
   // Unroll affine.for loops.
   pm.addPass(createLoopUnrollPass(
-                      /*unrollFactor=*/6,
-                      /*unrollUpToFactor=*/true));
+      /*unrollFactor=*/6,
+      /*unrollUpToFactor=*/true));
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
@@ -185,9 +185,10 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(conversion::gpu::createGpuKernelOutliningPass());
 
   // Convert GPU to comp.
-  // TODO figure out the memorySpace for Vulkan
+  // vulkan memory space is zero, which is correspond to vulkan spirv
+  // storebufferclass.
   pm.addPass(pmlc::conversion::gpu_to_comp::createConvertGpuToCompPass(
-      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/11));
+      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/0));
   pm.addPass(comp::createExecEnvCoalescingPass());
   pm.addPass(comp::createMinimizeAllocationsPass());
 
@@ -202,7 +203,8 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
 
   // Comp to LLVM - Vulkan function calls.
-  pm.addPass(pmlc::conversion::comp_to_vulkanCall::createConvertCompToVulkanCallPass());
+  pm.addPass(pmlc::conversion::comp_to_vulkanCall::
+                 createConvertCompToVulkanCallPass());
 
   // Convert Vulkan calls to LLVM code
   pm.addPass(createConvertStandardToLLVM());

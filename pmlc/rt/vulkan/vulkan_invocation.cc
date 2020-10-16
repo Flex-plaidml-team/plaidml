@@ -433,7 +433,6 @@ void VulkanInvocation::createComputePipeline(uint32_t subgroupSize) {
                                               &computePipelineCreateInfo, 0,
                                               &curr->pipeline),
                      "vkCreateComputePipelines");
-  IVLOG(1, "Debug check point!!!");
 }
 
 void VulkanInvocation::createDescriptorPool() {
