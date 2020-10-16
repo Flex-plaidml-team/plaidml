@@ -81,9 +81,10 @@ void *VkAlloc(void *vkInvocation, uint32_t bytes, void *hostPtr) {
   vulkanBuffer newBuffer;
   VulkanHostMemoryBuffer memBuffer{hostPtr, bytes};
   newBuffer.HostBuffer = memBuffer;
-  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
+  newBuffer.spirvClass = mlir::spirv::StorageClass::StorageBuffer;
+//  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
   return static_cast<VulkanInvocation *>(vkInvocation)
-      ->createMemoryBuffer(0);
+      ->createMemoryBuffer(0, newBuffer);
 }
 
 // TODO open vulkan backend API;

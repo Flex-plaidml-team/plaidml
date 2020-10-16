@@ -45,6 +45,7 @@ struct VulkanHostMemoryBuffer {
 struct vulkanBuffer {
   VulkanDeviceMemoryBuffer devBuffer;
   VulkanHostMemoryBuffer HostBuffer;
+  mlir::spirv::StorageClass spirvClass;
   DescriptorSetIndex setIndex;
 };
 
@@ -153,8 +154,7 @@ public:
 
   void run();
 
-  void allocNewBuffer(vulkanBuffer buffer);
-  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex);
+  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex, vulkanBuffer& newbufer);
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);
   void deallocDeviceBuffer(void *buffer);
