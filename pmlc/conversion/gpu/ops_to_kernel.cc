@@ -6,6 +6,7 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/RegionUtils.h"
 
@@ -24,6 +25,7 @@ using namespace mlir; // NOLINT[build/namespaces]
 namespace pmlc::conversion::gpu {
 namespace gpu = mlir::gpu;
 using mlir::FuncOp;
+using mlir::MemRefType;
 using mlir::OpBuilder;
 using mlir::SmallVector;
 using mlir::Value;
@@ -68,6 +70,42 @@ public:
           if (allocOp == nullptr && gpuLaunchOp == nullptr) {
             worklist.push_back(&op);
           } else {
+            checkOpsUses(builder, worklist);
+            worklist.clear();
+          }
+        } else {
+          if (gpuLaunchOp) {
+            startCreatingLaunchOp = true;
+          }
+        }
+      }
+
+      numLaunchOp = 0;
+      startCreatingLaunchOp = false;
+      worklist.clear();
+      moduleOp.walk([&numLaunchOp](gpu::LaunchOp op) { numLaunchOp++; });
+      if (numLaunchOp <= 1) {
+        break;
+      }
+
+      for (auto &op : llvm::make_early_inc_range(funcOp.getOps())) {
+        auto gpuLaunchOp = dyn_cast<gpu::LaunchOp>(op);
+        auto allocOp = dyn_cast<mlir::AllocOp>(op);
+
+        if (numLaunchOp == 0) {
+          builder.setInsertionPoint(&op);
+          cloneOp(builder, cloningMap, &op);
+          continue;
+        }
+
+        if (gpuLaunchOp) {
+          numLaunchOp--;
+        }
+
+        if (startCreatingLaunchOp) {
+          if (allocOp == nullptr && gpuLaunchOp == nullptr) {
+            worklist.push_back(&op);
+          } else {
             createLaunchOp(builder, cloningMap, worklist);
             worklist.clear();
           }
@@ -81,11 +119,59 @@ public:
   }
 
 private:
+  mlir::Type getUnrankedMemRefType(Type elementType) {
+    return UnrankedMemRefType::get(elementType, /*memorySpace=*/0);
+  }
+
   void cloneOp(OpBuilder &builder, BlockAndValueMapping &cloningMap,
                Operation *op) {
     Operation *clone = builder.clone(*op, cloningMap);
     cloningMap.map(op->getResults(), clone->getResults());
     op->erase();
+  }
+
+  void checkOpsUses(OpBuilder &builder,
+                    SmallVectorImpl<Operation *> &worklist) {
+
+    auto resultUsedOutsideModule =
+        [&](Value var, int numUses,
+            SmallVectorImpl<Operation *> &worklist) -> bool {
+      int useCount = 0;
+      for (auto op : worklist) {
+        for (auto operand : op->getOperands()) {
+          if (operand == var) {
+            useCount++;
+          }
+        }
+      }
+      return useCount < numUses;
+    };
+
+    auto loc = worklist.front()->getLoc();
+    BlockAndValueMapping cloningMap;
+    for (auto op : worklist) {
+      auto result = op->getResult(0);
+      int numUses = 0;
+      for (auto &use : op->getUses()) {
+        use.getOwner();
+        numUses++;
+      }
+      if (resultUsedOutsideModule(result, numUses, worklist)) {
+        builder.setInsertionPoint(worklist.front());
+        auto memrefType = result.getType().cast<MemRefType>();
+        auto allocOp = builder.create<AllocOp>(loc, memrefType);
+        builder.setInsertionPointAfter(op);
+        builder.create<StoreOp>(loc, result, allocOp);
+        for (auto &use : op->getUses()) {
+          auto useOp = use.getOwner();
+          builder.setInsertionPointAfter(useOp);
+          auto loadOp = builder.create<LoadOp>(loc, allocOp);
+          cloningMap.map(op->getResult(0), loadOp.getResult());
+          builder.clone(*useOp, cloningMap);
+          useOp->erase();
+        }
+      }
+    }
   }
 
   void createLaunchOp(OpBuilder &builder, BlockAndValueMapping &cloningMap,
