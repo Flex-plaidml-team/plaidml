@@ -57,9 +57,9 @@ public:
         auto allocOp = dyn_cast<mlir::AllocOp>(op);
 
         if (numLaunchOp == 0) {
+          startCreatingLaunchOp = false;
           builder.setInsertionPoint(&op);
           cloneOp(builder, cloningMap, &op);
-          continue;
         }
 
         if (gpuLaunchOp) {
@@ -119,10 +119,6 @@ public:
   }
 
 private:
-  mlir::Type getUnrankedMemRefType(Type elementType) {
-    return UnrankedMemRefType::get(elementType, /*memorySpace=*/0);
-  }
-
   void cloneOp(OpBuilder &builder, BlockAndValueMapping &cloningMap,
                Operation *op) {
     Operation *clone = builder.clone(*op, cloningMap);
@@ -132,7 +128,10 @@ private:
 
   void checkOpsUses(OpBuilder &builder,
                     SmallVectorImpl<Operation *> &worklist) {
-
+    if (worklist.empty()) {
+      return;
+    }
+    std::cout << "!!! Inside checkOpsUses" << std::endl;
     auto resultUsedOutsideModule =
         [&](Value var, int numUses,
             SmallVectorImpl<Operation *> &worklist) -> bool {
@@ -148,26 +147,37 @@ private:
     };
 
     auto loc = worklist.front()->getLoc();
+    std::cout << "!!! Inside checkOpsUses: temp tag" << std::endl;
     BlockAndValueMapping cloningMap;
     for (auto op : worklist) {
-      auto result = op->getResult(0);
+      //   op->dump();
+
       int numUses = 0;
       for (auto &use : op->getUses()) {
         use.getOwner();
+        // useOp->dump();
         numUses++;
       }
+
+      auto opUses = op->getUses();
+      auto result = op->getResult(0);
       if (resultUsedOutsideModule(result, numUses, worklist)) {
         builder.setInsertionPoint(worklist.front());
-        auto memrefType = result.getType().cast<MemRefType>();
-        auto allocOp = builder.create<AllocOp>(loc, memrefType);
+        auto newMemrefType = MemRefType::get({}, result.getType());
+        auto allocOp = builder.create<AllocOp>(loc, newMemrefType);
         builder.setInsertionPointAfter(op);
         builder.create<StoreOp>(loc, result, allocOp);
-        for (auto &use : op->getUses()) {
+
+        for (auto &use : opUses) {
           auto useOp = use.getOwner();
-          builder.setInsertionPointAfter(useOp);
+          useOp->dump();
+          builder.setInsertionPoint(useOp);
           auto loadOp = builder.create<LoadOp>(loc, allocOp);
-          cloningMap.map(op->getResult(0), loadOp.getResult());
-          builder.clone(*useOp, cloningMap);
+          cloningMap.map(op->getResults(), loadOp.getOperation()->getResults());
+
+          Operation *clone = builder.clone(*useOp, cloningMap);
+          cloningMap.map(useOp->getResults(), clone->getResults());
+          useOp->replaceAllUsesWith(clone);
           useOp->erase();
         }
       }
@@ -176,6 +186,8 @@ private:
 
   void createLaunchOp(OpBuilder &builder, BlockAndValueMapping &cloningMap,
                       SmallVectorImpl<Operation *> &worklist) {
+    std::cout << "!!! Inside createLaunchOp" << std::endl;
+
     if (worklist.empty())
       return;
     builder.setInsertionPoint(worklist.front());
