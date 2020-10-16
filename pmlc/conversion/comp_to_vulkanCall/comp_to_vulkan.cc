@@ -318,7 +318,7 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkAlloc,
       LLVM::LLVMType::getFunctionTy(llvmInt8Ptr,
-                                    {llvmInt8Ptr, llvmInt32, llvmInt8Ptr},
+                                    {llvmInt8Ptr, llvmInt32},
           /*isVarArg=*/false));
 
   std::vector<std::pair<const char *, mlir::Type>> bindType{
