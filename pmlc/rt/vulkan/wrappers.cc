@@ -30,20 +30,6 @@
 using pmlc::rt::Device;
 
 namespace pmlc::rt::vulkan {
-namespace {
-
-template <typename T>
-void bindBuffer(void *vkInvocation, uint32_t bufferByteSize,
-                ::UnrankedMemRefType<T> *unrankedMemRef) {
-  vulkanBuffer newBuffer;
-  DynamicMemRefType<T> memRef(*unrankedMemRef);
-  T *ptr = memRef.data + memRef.offset;
-  VulkanHostMemoryBuffer memBuffer{ptr, bufferByteSize};
-  newBuffer.HostBuffer = memBuffer;
-  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
-}
-
-} // namespace
 
 extern "C" {
 
@@ -121,28 +107,6 @@ void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) {
 
 void *VkScheduleFunc() { return nullptr; }
 
-#define BIND_BUFFER_IMPL(_name_, _type_)                                       \
-  void _mlir_ciface_bindBuffer##_name_(                                        \
-      void *vkInvocation, uint32_t bufferByteSize,                             \
-      ::UnrankedMemRefType<_type_> *unrankedMemRef) {                          \
-    bindBuffer(vkInvocation, bufferByteSize, unrankedMemRef);                  \
-  }
-
-BIND_BUFFER_IMPL(Float16, half_float::half);
-BIND_BUFFER_IMPL(Float32, float);
-BIND_BUFFER_IMPL(Float64, double);
-BIND_BUFFER_IMPL(Integer8, int8_t);
-BIND_BUFFER_IMPL(Integer16, int16_t);
-BIND_BUFFER_IMPL(Integer32, int32_t);
-BIND_BUFFER_IMPL(Integer64, int64_t);
-
-void _mlir_ciface_fillResourceFloat32(
-    ::UnrankedMemRefType<float> *unrankedMemRef, int32_t size, float value) {
-  DynamicMemRefType<float> memRef(*unrankedMemRef);
-  float *ptr = memRef.data + memRef.offset;
-  std::fill_n(ptr, size, value);
-}
-
 } // extern "C"
 
 namespace {
@@ -162,22 +126,6 @@ struct Registration {
     registerSymbol("addVulkanLaunchActionToSchedule",
                    reinterpret_cast<void *>(addVulkanLaunchActionToSchedule));
     registerSymbol("run", reinterpret_cast<void *>(run));
-    registerSymbol("_mlir_ciface_bindBufferFloat16",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferFloat16));
-    registerSymbol("_mlir_ciface_bindBufferFloat32",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferFloat32));
-    registerSymbol("_mlir_ciface_bindBufferFloat64",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferFloat64));
-    registerSymbol("_mlir_ciface_bindBufferInteger8",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger8));
-    registerSymbol("_mlir_ciface_bindBufferInteger16",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger16));
-    registerSymbol("_mlir_ciface_bindBufferInteger32",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger32));
-    registerSymbol("_mlir_ciface_bindBufferInteger64",
-                   reinterpret_cast<void *>(_mlir_ciface_bindBufferInteger64));
-    registerSymbol("_mlir_ciface_fillResourceFloat32",
-                   reinterpret_cast<void *>(_mlir_ciface_fillResourceFloat32));
     registerSymbol("VkBarrier", reinterpret_cast<void *>(VkBarrier));
     registerSymbol("VkWait", reinterpret_cast<void *>(VkWait));
     registerSymbol("VkAlloc", reinterpret_cast<void *>(VkAlloc));

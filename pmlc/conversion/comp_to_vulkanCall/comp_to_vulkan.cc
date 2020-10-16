@@ -46,45 +46,7 @@ static constexpr const char *kVkWrite = "VkWrite";
 static constexpr const char *kVkScheduleFunc = "VkScheduleFunc";
 static constexpr const char *kVkAlloc = "VkAlloc";
 
-static constexpr const char *kBindBufferBFloat16 = "bindBufferBFloat16";
-static constexpr const char *kBindBufferFloat16 = "bindBufferFloat16";
-static constexpr const char *kBindBufferFloat32 = "bindBufferFloat32";
-static constexpr const char *kBindBufferFloat64 = "bindBufferFloat64";
-static constexpr const char *kBindBufferInteger8 = "bindBufferInteger8";
-static constexpr const char *kBindBufferInteger16 = "bindBufferInteger16";
-static constexpr const char *kBindBufferInteger32 = "bindBufferInteger32";
-static constexpr const char *kBindBufferInteger64 = "bindBufferInteger64";
-static constexpr const int kByteBits = 8;
-
 namespace {
-
-//const char *getBufferBindingFunc(mlir::Type elementType) {
-//  if (elementType.isInteger(8)) {
-//    return kBindBufferInteger8;
-//  }
-//  if (elementType.isInteger(16)) {
-//    return kBindBufferInteger16;
-//  }
-//  if (elementType.isInteger(32)) {
-//    return kBindBufferInteger32;
-//  }
-//  if (elementType.isInteger(64)) {
-//    return kBindBufferInteger64;
-//  }
-//  if (elementType.isBF16()) {
-//    return kBindBufferBFloat16;
-//  }
-//  if (elementType.isF16()) {
-//    return kBindBufferFloat16;
-//  }
-//  if (elementType.isF32()) {
-//    return kBindBufferFloat32;
-//  }
-//  if (elementType.isF64()) {
-//    return kBindBufferFloat64;
-//  }
-//  return nullptr;
-//}
 
 class ConvertCompToVulkanCall
     : public ConvertCompToVulkanCallBase<ConvertCompToVulkanCall> {
@@ -321,25 +283,6 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     {llvmInt8Ptr, llvmInt32},
           /*isVarArg=*/false));
 
-//  std::vector<std::pair<const char *, mlir::Type>> bindType{
-//      {kBindBufferFloat16, builder.getF16Type()},
-//      {kBindBufferFloat32, builder.getF32Type()},
-//      {kBindBufferFloat64, builder.getF32Type()},
-//      {kBindBufferInteger8, builder.getIntegerType(8)},
-//      {kBindBufferInteger16, builder.getIntegerType(16)},
-//      {kBindBufferInteger32, builder.getI32Type()},
-//      {kBindBufferInteger64, builder.getI64Type()}};
-//
-//  for (auto func : bindType) {
-//    builder.create<mlir::FuncOp>(
-//        loc, func.first,
-//        mlir::FunctionType::get(
-//            {mlir::ArrayRef<mlir::Type>{
-//                llvmInt8Ptr, llvmInt32,
-//                mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
-//            {}, context),
-//        mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
-//  }
 } // namespace pmlc::conversion::comp_to_vulkanCall
 
 template <class Op>
