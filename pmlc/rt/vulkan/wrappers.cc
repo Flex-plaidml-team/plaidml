@@ -91,9 +91,13 @@ void run(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 
-void *VkAlloc(void *vkInvocation, DescriptorSetIndex setIndex) {
+void *VkAlloc(void *vkInvocation, uint32_t bytes, void *hostPtr) {
+  vulkanBuffer newBuffer;
+  VulkanHostMemoryBuffer memBuffer{hostPtr, bytes};
+  newBuffer.HostBuffer = memBuffer;
+  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
   return static_cast<VulkanInvocation *>(vkInvocation)
-      ->createMemoryBuffer(setIndex);
+      ->createMemoryBuffer(0);
 }
 
 // TODO open vulkan backend API;

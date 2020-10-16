@@ -8,10 +8,12 @@
 
 #include "mlir/Support/LLVM.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "pmlc/util/logging.h"
 
 namespace pmlc::rt::vulkan {
 
 inline void throwOnVulkanError(VkResult result, const char *call) {
+  IVLOG(1, "Debug check point!!!" << call);
   if (result != VK_SUCCESS) {
     throw std::runtime_error{
         llvm::formatv("{0} failed with error code {1}", call, result)};

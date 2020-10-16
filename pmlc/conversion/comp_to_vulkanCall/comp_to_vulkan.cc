@@ -58,33 +58,33 @@ static constexpr const int kByteBits = 8;
 
 namespace {
 
-const char *getBufferBindingFunc(mlir::Type elementType) {
-  if (elementType.isInteger(8)) {
-    return kBindBufferInteger8;
-  }
-  if (elementType.isInteger(16)) {
-    return kBindBufferInteger16;
-  }
-  if (elementType.isInteger(32)) {
-    return kBindBufferInteger32;
-  }
-  if (elementType.isInteger(64)) {
-    return kBindBufferInteger64;
-  }
-  if (elementType.isBF16()) {
-    return kBindBufferBFloat16;
-  }
-  if (elementType.isF16()) {
-    return kBindBufferFloat16;
-  }
-  if (elementType.isF32()) {
-    return kBindBufferFloat32;
-  }
-  if (elementType.isF64()) {
-    return kBindBufferFloat64;
-  }
-  return nullptr;
-}
+//const char *getBufferBindingFunc(mlir::Type elementType) {
+//  if (elementType.isInteger(8)) {
+//    return kBindBufferInteger8;
+//  }
+//  if (elementType.isInteger(16)) {
+//    return kBindBufferInteger16;
+//  }
+//  if (elementType.isInteger(32)) {
+//    return kBindBufferInteger32;
+//  }
+//  if (elementType.isInteger(64)) {
+//    return kBindBufferInteger64;
+//  }
+//  if (elementType.isBF16()) {
+//    return kBindBufferBFloat16;
+//  }
+//  if (elementType.isF16()) {
+//    return kBindBufferFloat16;
+//  }
+//  if (elementType.isF32()) {
+//    return kBindBufferFloat32;
+//  }
+//  if (elementType.isF64()) {
+//    return kBindBufferFloat64;
+//  }
+//  return nullptr;
+//}
 
 class ConvertCompToVulkanCall
     : public ConvertCompToVulkanCallBase<ConvertCompToVulkanCall> {
@@ -321,25 +321,25 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     {llvmInt8Ptr, llvmInt32},
           /*isVarArg=*/false));
 
-  std::vector<std::pair<const char *, mlir::Type>> bindType{
-      {kBindBufferFloat16, builder.getF16Type()},
-      {kBindBufferFloat32, builder.getF32Type()},
-      {kBindBufferFloat64, builder.getF32Type()},
-      {kBindBufferInteger8, builder.getIntegerType(8)},
-      {kBindBufferInteger16, builder.getIntegerType(16)},
-      {kBindBufferInteger32, builder.getI32Type()},
-      {kBindBufferInteger64, builder.getI64Type()}};
-
-  for (auto func : bindType) {
-    builder.create<mlir::FuncOp>(
-        loc, func.first,
-        mlir::FunctionType::get(
-            {mlir::ArrayRef<mlir::Type>{
-                llvmInt8Ptr, llvmInt32,
-                mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
-            {}, context),
-        mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
-  }
+//  std::vector<std::pair<const char *, mlir::Type>> bindType{
+//      {kBindBufferFloat16, builder.getF16Type()},
+//      {kBindBufferFloat32, builder.getF32Type()},
+//      {kBindBufferFloat64, builder.getF32Type()},
+//      {kBindBufferInteger8, builder.getIntegerType(8)},
+//      {kBindBufferInteger16, builder.getIntegerType(16)},
+//      {kBindBufferInteger32, builder.getI32Type()},
+//      {kBindBufferInteger64, builder.getI64Type()}};
+//
+//  for (auto func : bindType) {
+//    builder.create<mlir::FuncOp>(
+//        loc, func.first,
+//        mlir::FunctionType::get(
+//            {mlir::ArrayRef<mlir::Type>{
+//                llvmInt8Ptr, llvmInt32,
+//                mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
+//            {}, context),
+//        mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
+//  }
 } // namespace pmlc::conversion::comp_to_vulkanCall
 
 template <class Op>
@@ -420,52 +420,43 @@ mlir::LogicalResult
 ConvertAlloc::matchAndRewrite(comp::Alloc op,
                               mlir::ArrayRef<mlir::Value> operands,
                               mlir::ConversionPatternRewriter &rewriter) const {
-  if (!isMatchingRuntime(op)) {
+  if (!isMatchingRuntime(op))
     return mlir::failure();
-  }
 
   mlir::Location loc = op.getLoc();
+  mlir::MemRefType resultType = op.getType().cast<mlir::MemRefType>();
 
-  LLVM::LLVMType llvmInt32Ty =
-      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-  mlir::MLIRContext *context = rewriter.getContext();
-  LLVM::LLVMType llvmInt8Ptr = LLVM::LLVMType::getInt8PtrTy(context);
-
-  mlir::Value descriptorSet = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Ty, rewriter.getI32IntegerAttr(0));
-  auto buffer = op.hostMem();
-
-  auto memRefType = buffer.getType().dyn_cast_or_null<mlir::MemRefType>();
-  if (!memRefType) {
-    return mlir::failure();
-  }
-
-  auto shape = memRefType.getShape();
+  mlir::SmallVector<mlir::Value, 3> castOperands;
+  // Operand 0 - execution environment.
+  castOperands.push_back(operands[0]);
+  // Operand 1 - size of allocated memory in bytes.
+  auto shape = resultType.getShape();
   uint32_t numElement = 1;
-  for (auto dim : shape) {
+  for (auto dim : shape)
     numElement *= dim;
+  uint32_t elementTypeSize =
+      llvm::divideCeil(resultType.getElementTypeBitWidth(), 8);
+  mlir::Value bufferByteSize = rewriter.create<LLVM::ConstantOp>(
+      loc, LLVM::LLVMType::getInt32Ty(rewriter.getContext()),
+      rewriter.getI32IntegerAttr(numElement * elementTypeSize));
+  castOperands.push_back(bufferByteSize);
+  // Operand 2 - pointer to data on host or null.
+  if (operands.size() > 1) {
+    mlir::Value hostPtr = materializeConversion(rewriter, loc, operands[1]);
+    if (!hostPtr)
+      return mlir::failure();
+    castOperands.push_back(hostPtr);
+  } else {
+    LLVM::LLVMType llvmPointerType =
+        LLVM::LLVMType::getInt8PtrTy(rewriter.getContext());
+    mlir::Value nullPtr = rewriter.create<LLVM::NullOp>(loc, llvmPointerType);
+    castOperands.push_back(nullPtr);
   }
 
-  auto elementType = memRefType.getElementType();
-  uint32_t elementTypeSize =
-      llvm::divideCeil(elementType.getIntOrFloatBitWidth(), kByteBits);
-
-  mlir::Value bufferByteSize = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Ty,
-      rewriter.getI32IntegerAttr(numElement * elementTypeSize));
-  mlir::Value unrankedBuffer = rewriter.create<mlir::MemRefCastOp>(
-      loc, buffer,
-      mlir::UnrankedMemRefType::get(elementType, /*memorySpace=*/0));
-
-  rewriter.create<mlir::CallOp>(
-      loc, mlir::ArrayRef<mlir::Type>{},
-      rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
-      mlir::ArrayRef<mlir::Value>{operands[0], bufferByteSize, unrankedBuffer});
-
+  mlir::Type llvmResultType = convertType(op.getType());
   rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-      op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmInt8Ptr},
-      rewriter.getSymbolRefAttr(kVkAlloc),
-      mlir::ArrayRef<mlir::Value>{operands[0], descriptorSet});
+      op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmResultType},
+      rewriter.getSymbolRefAttr(kVkAlloc), castOperands);
   return mlir::success();
 }
 
