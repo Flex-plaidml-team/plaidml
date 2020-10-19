@@ -60,6 +60,9 @@ VulkanInvocation::~VulkanInvocation() {
       vkDestroyShaderModule(device->getDevice(), kernel->shaderModule, nullptr);
     }
   }
+  for (auto buffer : deviceBufferPool){
+    delete buffer;
+  }
 }
 
 void VulkanInvocation::createQueryPool() {
