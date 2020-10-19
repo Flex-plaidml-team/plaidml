@@ -138,8 +138,6 @@ struct GPUToSPIRVCustomPass
     std::unique_ptr<ConversionTarget> target =
         spirv::SPIRVConversionTarget::get(targetAttr);
 
-    targetAttr.dump();
-
     SPIRVTypeConverter typeConverter(targetAttr);
     ScfToSPIRVContext scfContext;
     OwningRewritePatternList patterns;

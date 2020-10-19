@@ -259,8 +259,8 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt8Ptr, llvmInt32,
                                      llvmInt8Ptr, llvmInt32, llvmInt32,
-                                     llvmInt32, llvmInt32},
-                                    /*isVarArg=*/true));
+                                     llvmInt32},
+                                    /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kSetVulkanLaunchKernelAction,
@@ -528,12 +528,37 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
     bufferOperands.push_back(remappedArg);
   }
 
-  mlir::Value bufferNum = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Type, rewriter.getI32IntegerAttr(bufferOperands.size()));
-  createActionOperands.push_back(bufferNum);
+  LLVM::LLVMType llvmInt32Ty =
+      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
 
-  createActionOperands.insert(createActionOperands.end(),
-                              bufferOperands.begin(), bufferOperands.end());
+  for (auto buffer : bufferOperands) {
+    auto memRefType = buffer.getType().dyn_cast_or_null<mlir::MemRefType>();
+    if (!memRefType) {
+      return mlir::failure();
+    }
+
+    auto shape = memRefType.getShape();
+    uint32_t numElement = 1;
+    for (auto dim : shape) {
+      numElement *= dim;
+    }
+
+    auto elementType = memRefType.getElementType();
+    uint32_t elementTypeSize =
+        llvm::divideCeil(elementType.getIntOrFloatBitWidth(), kByteBits);
+
+    mlir::Value bufferByteSize = rewriter.create<LLVM::ConstantOp>(
+        loc, llvmInt32Ty,
+        rewriter.getI32IntegerAttr(numElement * elementTypeSize));
+    mlir::Value unrankedBuffer = rewriter.create<mlir::MemRefCastOp>(
+        loc, buffer, mlir::UnrankedMemRefType::get(elementType, 0));
+
+    rewriter.create<mlir::CallOp>(
+        loc, mlir::ArrayRef<mlir::Type>{},
+        rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
+        mlir::ArrayRef<mlir::Value>{operands[0], bufferByteSize,
+                                    unrankedBuffer});
+  }
 
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},

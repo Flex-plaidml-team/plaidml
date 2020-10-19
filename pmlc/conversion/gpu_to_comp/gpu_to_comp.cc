@@ -143,8 +143,7 @@ mlir::LogicalResult RewriteLaunchFunc::allocateDeviceMemory(
     mlir::Value newArg = hostArg;
 
     if (auto memRefType = hostArg.getType().dyn_cast<mlir::MemRefType>()) {
-      if (!execEnvType.supportsMemorySpace(memRefType.getMemorySpace()) ||
-          execEnvType.getRuntime() == comp::Vulkan) {
+      if (!execEnvType.supportsMemorySpace(memRefType.getMemorySpace())) {
         mlir::MemRefType newMemRefType =
             mlir::MemRefType::Builder(memRefType)
                 .setMemorySpace(execEnvType.getDefaultMemorySpace());

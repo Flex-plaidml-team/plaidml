@@ -158,6 +158,8 @@ public:
   /// Sets needed data for Vulkan device.
   void setResourceData(const VulkanHostMemoryBuffer &hostMemBuffer);
 
+  void releaseResources();
+
 private:
   void mapStorageClassToDescriptorType(mlir::spirv::StorageClass storageClass,
                                        VkDescriptorType &descriptorType);
