@@ -87,7 +87,7 @@ void VulkanInvocation::createQueryPool() {
 
 void VulkanInvocation::createLaunchKernelAction(
     uint8_t *shader, uint32_t size, const char *entryPoint,
-    NumWorkGroups numWorkGroups, std::vector<vulkanBuffer *> buffers) {
+    NumWorkGroups numWorkGroups, std::vector<void *> buffers) {
   curr = std::make_shared<LaunchKernelAction>();
 
   curr->binary = shader;
@@ -95,9 +95,11 @@ void VulkanInvocation::createLaunchKernelAction(
   curr->entryPoint = entryPoint;
   curr->workGroups = numWorkGroups;
 
-  for (auto buffer : buffers) {
+  for (auto bufferPtr : buffers) {
+    auto buffer = static_cast<vulkanBuffer *>(bufferPtr);
     DescriptorSetIndex index = buffer->setIndex;
-    curr->deviceMemoryBufferMap[index].push_back(buffer->devBuffer);
+    IVLOG(1, "set buffer address is " << index << " " << buffer->HostBuffer.ptr);
+    curr->deviceMemoryBufferMap[0].push_back(buffer->devBuffer);
   }
 }
 
@@ -228,20 +230,20 @@ void VulkanInvocation::checkResourceData() {
   }
 }
 
-vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuffer& newbuffer) {
-  VulkanDeviceMemoryBuffer &memoryBuffer = newbuffer.devBuffer;
+vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuffer *newbuffer) {
+  VulkanDeviceMemoryBuffer &memoryBuffer = newbuffer->devBuffer;
   VkDescriptorType descriptorType = {};
   VkBufferUsageFlagBits bufferUsageSrc = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   VkBufferUsageFlagBits bufferUsageDst = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-  const auto resourceStorageClassBinding = newbuffer.spirvClass;
+  const auto resourceStorageClassBinding = newbuffer->spirvClass;
 
   mapStorageClassToDescriptorType(resourceStorageClassBinding, descriptorType);
   mapStorageClassToBufferUsageFlag(resourceStorageClassBinding, bufferUsageSrc);
   mapStorageClassToBufferUsageFlag(resourceStorageClassBinding, bufferUsageDst);
   // Set descriptor type for the specific device memory buffer.
   memoryBuffer.descriptorType = descriptorType;
-  const auto bufferSize = newbuffer.HostBuffer.size;
+  const auto bufferSize = newbuffer->HostBuffer.size;
 
   // Specify memory allocation info.
   VkMemoryAllocateInfo memoryAllocateInfo = {};
@@ -261,7 +263,7 @@ vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuff
                      "vkMapMemory");
 
   // Copy host memory into the mapped area.
-  std::memcpy(payload, newbuffer.HostBuffer.ptr, bufferSize);
+  std::memcpy(payload, newbuffer->HostBuffer.ptr, bufferSize);
   vkUnmapMemory(device->getDevice(), memoryBuffer.deviceMemory);
 
   VkBufferCreateInfo bufferCreateInfo = {};
@@ -290,9 +292,10 @@ vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuff
   memoryBuffer.bufferInfo.buffer = memoryBuffer.buffer;
   memoryBuffer.bufferInfo.offset = 0;
   memoryBuffer.bufferInfo.range = VK_WHOLE_SIZE;
-  newbuffer.setIndex = setIndex;
+  newbuffer->setIndex = setIndex;
   deviceBufferPool.push_back(newbuffer);
-  return &deviceBufferPool.back();
+  IVLOG(1, "alloc buffer address is " << newbuffer->setIndex << "  "<< newbuffer->HostBuffer.ptr);
+  return newbuffer;
 }
 
 void VulkanInvocation::createShaderModule() {
@@ -328,7 +331,6 @@ void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
       descriptorSetLayoutBinding.pImmutableSamplers = 0;
       descriptorSetLayoutBindings.push_back(descriptorSetLayoutBinding);
     }
-    IVLOG(1, "the bind num ");
     curr->descriptorSetLayoutBindingMap[descriptorSetIndex] =
         descriptorSetLayoutBindings;
   }
@@ -615,6 +617,7 @@ void VulkanInvocation::submitCommandBuffersToQueue() {
 
 void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
                                               void *deviceBuffer) {
+  IVLOG(1, "copy dev to host address is " << static_cast<vulkanBuffer *>(deviceBuffer)->HostBuffer.ptr);
   void *payload;
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
@@ -630,6 +633,7 @@ void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
 
 void VulkanInvocation::copyHostBufferToDevice(void *srcPtr,
                                               void *deviceBuffer) {
+  IVLOG(1, "copy host to dev buffer address is " << static_cast<vulkanBuffer *>(deviceBuffer)->HostBuffer.ptr);
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
   auto deviceMemoryBuffer = vulkanDeviceMemoryBuffer.deviceMemory;

@@ -26,6 +26,7 @@
 
 #include "pmlc/rt/symbol_registry.h"
 #include "pmlc/rt/vulkan/vulkan_invocation.h"
+#include "pmlc/util/logging.h"
 
 using pmlc::rt::Device;
 
@@ -45,11 +46,11 @@ void createVulkanLaunchKernelAction(void *vkInvocation, uint8_t *shader,
                                     uint32_t size, const char *entryPoint,
                                     uint32_t x, uint32_t y, uint32_t z,
                                     uint32_t count, ...) {
-  std::vector<vulkanBuffer *> deviceBuffer;
+  std::vector<void *> deviceBuffer;
   va_list args;
   va_start(args, count);
   for (unsigned i = 0; i < count; ++i)
-    deviceBuffer.push_back(va_arg(args, vulkanBuffer *));
+    deviceBuffer.push_back(va_arg(args, void *));
   va_end(args);
   static_cast<VulkanInvocation *>(vkInvocation)
       ->createLaunchKernelAction(shader, size, entryPoint, {x, y, z},
@@ -78,13 +79,15 @@ void run(void *vkInvocation) {
 }
 
 void *VkAlloc(void *vkInvocation, uint32_t bytes, void *hostPtr) {
-  vulkanBuffer newBuffer;
+  vulkanBuffer *newBuffer = new vulkanBuffer();
   VulkanHostMemoryBuffer memBuffer{hostPtr, bytes};
-  newBuffer.HostBuffer = memBuffer;
-  newBuffer.spirvClass = mlir::spirv::StorageClass::StorageBuffer;
+  newBuffer->HostBuffer = memBuffer;
+  newBuffer->spirvClass = mlir::spirv::StorageClass::StorageBuffer;
+  DescriptorSetIndex setIndex = 0;
+  IVLOG(1, "the host ptr is " << hostPtr);
 //  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
   return static_cast<VulkanInvocation *>(vkInvocation)
-      ->createMemoryBuffer(0, newBuffer);
+      ->createMemoryBuffer(setIndex, newBuffer);
 }
 
 // TODO open vulkan backend API;

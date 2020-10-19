@@ -141,7 +141,7 @@ public:
   void createLaunchKernelAction(uint8_t *shader, uint32_t size,
                                 const char *entryPoint,
                                 NumWorkGroups numWorkGroups,
-                                std::vector<vulkanBuffer *> buffers);
+                                std::vector<void *> buffers);
 
   void setLaunchKernelAction(uint32_t subgroupSize);
 
@@ -154,7 +154,7 @@ public:
 
   void run();
 
-  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex, vulkanBuffer& newbufer);
+  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex, vulkanBuffer *newbufer);
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);
   void deallocDeviceBuffer(void *buffer);
@@ -182,7 +182,7 @@ private:
 
   std::vector<ActionPtr> schedule;
   std::shared_ptr<LaunchKernelAction> curr;
-  std::vector<vulkanBuffer> deviceBufferPool;
+  std::vector<vulkanBuffer *> deviceBufferPool;
   std::shared_ptr<VulkanDevice> device;
   VkCommandPool commandPool;
   llvm::SmallVector<VkCommandBuffer, 1> commandBuffers;
