@@ -143,6 +143,7 @@ mlir::LogicalResult RewriteLaunchFunc::allocateDeviceMemory(
     mlir::Value newArg = hostArg;
 
     if (auto memRefType = hostArg.getType().dyn_cast<mlir::MemRefType>()) {
+      // for vulkan runtime, it's default memorySpace is zero.
       if (!execEnvType.supportsMemorySpace(memRefType.getMemorySpace()) ||
           execEnvType.getRuntime() == comp::Vulkan) {
         mlir::MemRefType deviceMemRefType =

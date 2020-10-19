@@ -57,13 +57,10 @@ void createVulkanLaunchKernelAction(void *vkInvocation, uint8_t *shader,
                                  deviceBuffer);
 }
 
+// add this API to compute dialect.
 void createVulkanMemoryTransferAction(void *vkInvocation, uint64_t src_index,
                                       uint64_t src_binding, uint64_t dst_index,
-                                      uint64_t dst_binding) {
-//  static_cast<VulkanInvocation *>(vkInvocation)
-//      ->createMemoryTransferAction(src_index, src_binding, dst_index,
-//                                   dst_binding);
-}
+                                      uint64_t dst_binding) {}
 
 void setVulkanLaunchKernelAction(void *vkInvocation, uint32_t subgroupSize) {
   static_cast<VulkanInvocation *>(vkInvocation)
@@ -83,17 +80,11 @@ void *VkAlloc(void *vkInvocation, uint32_t bytes, void *hostPtr) {
   VulkanHostMemoryBuffer memBuffer{hostPtr, bytes};
   newBuffer->HostBuffer = memBuffer;
   newBuffer->spirvClass = mlir::spirv::StorageClass::StorageBuffer;
+  // maybe set it in Alloc Pattern of comp_to_vulkanCall pass.
   DescriptorSetIndex setIndex = 0;
-  IVLOG(1, "the host ptr is " << hostPtr);
-//  static_cast<VulkanInvocation *>(vkInvocation)->allocNewBuffer(newBuffer);
   return static_cast<VulkanInvocation *>(vkInvocation)
       ->createMemoryBuffer(setIndex, newBuffer);
 }
-
-// TODO open vulkan backend API;
-void *VkBarrier(void *invocation, uint32_t count, ...) { return nullptr; }
-
-void VkWait(uint32_t count, ...) {}
 
 void VkDealloc(void *invocation, void *memory) {
   static_cast<VulkanInvocation *>(invocation)->deallocDeviceBuffer(memory);
@@ -110,6 +101,11 @@ void *VkWrite(void *src, void *dst, void *invocation, uint32_t count, ...) {
 }
 
 void *VkScheduleFunc() { return nullptr; }
+
+// TODO open vulkan backend API;
+void *VkBarrier(void *invocation, uint32_t count, ...) { return nullptr; }
+
+void VkWait(uint32_t count, ...) {}
 
 } // extern "C"
 

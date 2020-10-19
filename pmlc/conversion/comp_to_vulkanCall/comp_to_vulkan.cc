@@ -59,7 +59,7 @@ void ConvertCompToVulkanCall::runOnOperation() {
   mlir::ModuleOp module = getOperation();
   mlir::MLIRContext *context = &getContext();
 
-  // add the submit op for vulkan run;
+  // add the submit op for vulkan runtime;
   unsigned scheduleFuncNum = 0, lastScheduleFunc = 0;
   auto funcOp = mlir::cast<mlir::FuncOp>(module.getBodyRegion().front().front());
   funcOp.walk([&](comp::ScheduleFunc op) { scheduleFuncNum++; });
@@ -131,11 +131,10 @@ struct ConvertToFuncCallPattern : ConvertCompToVkBasePattern<Op> {
 using ConvertToInitVulkan = ConvertToFuncCallPattern<comp::CreateExecEnv>;
 using ConvertToDeinitVulkan = ConvertToFuncCallPattern<comp::DestroyExecEnv>;
 using ConvertToCommandBufferSubmit = ConvertToFuncCallPattern<comp::Submit>;
-
-// TODO dont open those api on vulkan backend;
+using ConvertDealloc = ConvertToFuncCallPattern<comp::Dealloc>;
+// TODO open those api on vulkan backend;
 using ConvertWait = ConvertToFuncCallPattern<comp::Wait>;
 using ConvertScheduleBarrier = ConvertToFuncCallPattern<comp::ScheduleBarrier>;
-using ConvertDealloc = ConvertToFuncCallPattern<comp::Dealloc>;
 
 /// Template pattern common for both comp::ScheduleRead and
 /// comp::ScheduleWrite.
@@ -496,6 +495,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       mlir::ArrayRef<mlir::Value>{operands[0]});
 
   mlir::Type llvmEventType = this->convertType(op.getType());
+  // generate null event pointer.
   rewriter.replaceOpWithNewOp<LLVM::CallOp>(
       op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmEventType},
       rewriter.getSymbolRefAttr(kVkScheduleFunc),

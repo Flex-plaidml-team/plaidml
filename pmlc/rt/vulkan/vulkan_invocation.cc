@@ -60,6 +60,7 @@ VulkanInvocation::~VulkanInvocation() {
       vkDestroyShaderModule(device->getDevice(), kernel->shaderModule, nullptr);
     }
   }
+
   for (auto buffer : deviceBufferPool){
     delete buffer;
   }
@@ -98,11 +99,11 @@ void VulkanInvocation::createLaunchKernelAction(
   curr->entryPoint = entryPoint;
   curr->workGroups = numWorkGroups;
 
+  // pass all vulkan buffer to Action kernel.
   for (auto bufferPtr : buffers) {
     auto buffer = static_cast<vulkanBuffer *>(bufferPtr);
     DescriptorSetIndex index = buffer->setIndex;
-    IVLOG(1, "set buffer address is " << index << " " << buffer->HostBuffer.ptr);
-    curr->deviceMemoryBufferMap[0].push_back(buffer->devBuffer);
+    curr->deviceMemoryBufferMap[index].push_back(buffer->devBuffer);
   }
 }
 
@@ -198,41 +199,6 @@ void VulkanInvocation::run() {
   }
 }
 
-void VulkanInvocation::mapStorageClassToDescriptorType(
-    mlir::spirv::StorageClass storageClass, VkDescriptorType &descriptorType) {
-  switch (storageClass) {
-  case mlir::spirv::StorageClass::StorageBuffer:
-    descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    break;
-  case mlir::spirv::StorageClass::Uniform:
-    descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    break;
-  default:
-    throw std::runtime_error{"unsupported storage class"};
-  }
-}
-
-void VulkanInvocation::mapStorageClassToBufferUsageFlag(
-    mlir::spirv::StorageClass storageClass,
-    VkBufferUsageFlagBits &bufferUsage) {
-  switch (storageClass) {
-  case mlir::spirv::StorageClass::StorageBuffer:
-    bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    break;
-  case mlir::spirv::StorageClass::Uniform:
-    bufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    break;
-  default:
-    throw std::runtime_error{"unsupported storage class"};
-  }
-}
-
-void VulkanInvocation::checkResourceData() {
-  if (!curr->binarySize || !curr->binary) {
-    throw std::runtime_error{"binary shader size must be greater than zero"};
-  }
-}
-
 vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuffer *newbuffer) {
   VulkanDeviceMemoryBuffer &memoryBuffer = newbuffer->devBuffer;
   VkDescriptorType descriptorType = {};
@@ -297,8 +263,42 @@ vulkanBuffer *VulkanInvocation::createMemoryBuffer(uint32_t setIndex, vulkanBuff
   memoryBuffer.bufferInfo.range = VK_WHOLE_SIZE;
   newbuffer->setIndex = setIndex;
   deviceBufferPool.push_back(newbuffer);
-  IVLOG(1, "alloc buffer address is " << newbuffer->setIndex << "  "<< newbuffer->HostBuffer.ptr);
   return newbuffer;
+}
+
+void VulkanInvocation::mapStorageClassToDescriptorType(
+    mlir::spirv::StorageClass storageClass, VkDescriptorType &descriptorType) {
+  switch (storageClass) {
+  case mlir::spirv::StorageClass::StorageBuffer:
+    descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    break;
+  case mlir::spirv::StorageClass::Uniform:
+    descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    break;
+  default:
+    throw std::runtime_error{"unsupported storage class"};
+  }
+}
+
+void VulkanInvocation::mapStorageClassToBufferUsageFlag(
+    mlir::spirv::StorageClass storageClass,
+    VkBufferUsageFlagBits &bufferUsage) {
+  switch (storageClass) {
+  case mlir::spirv::StorageClass::StorageBuffer:
+    bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    break;
+  case mlir::spirv::StorageClass::Uniform:
+    bufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    break;
+  default:
+    throw std::runtime_error{"unsupported storage class"};
+  }
+}
+
+void VulkanInvocation::checkResourceData() {
+  if (!curr->binarySize || !curr->binary) {
+    throw std::runtime_error{"binary shader size must be greater than zero"};
+  }
 }
 
 void VulkanInvocation::createShaderModule() {
@@ -324,7 +324,6 @@ void VulkanInvocation::initDescriptorSetLayoutBindingMap() {
     const auto descriptorSetIndex = deviceMemoryBufferMapPair.first;
 
     // Create a layout binding for each descriptor.
-    IVLOG(1, "the bind num is " << deviceMemoryBuffers.size());
     for (size_t i=0 ; i<deviceMemoryBuffers.size(); i++) {
       VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = {};
       descriptorSetLayoutBinding.binding = i;
@@ -620,7 +619,6 @@ void VulkanInvocation::submitCommandBuffersToQueue() {
 
 void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
                                               void *deviceBuffer) {
-  IVLOG(1, "copy dev to host address is " << static_cast<vulkanBuffer *>(deviceBuffer)->HostBuffer.ptr);
   void *payload;
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
@@ -636,7 +634,6 @@ void VulkanInvocation::copyDeviceBufferToHost(void *hostPtr,
 
 void VulkanInvocation::copyHostBufferToDevice(void *srcPtr,
                                               void *deviceBuffer) {
-  IVLOG(1, "copy host to dev buffer address is " << static_cast<vulkanBuffer *>(deviceBuffer)->HostBuffer.ptr);
   auto vulkanDeviceMemoryBuffer =
       static_cast<vulkanBuffer *>(deviceBuffer)->devBuffer;
   auto deviceMemoryBuffer = vulkanDeviceMemoryBuffer.deviceMemory;

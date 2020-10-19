@@ -67,16 +67,6 @@ struct DescriptorSetInfo {
   VkDescriptorType descriptorType{VK_DESCRIPTOR_TYPE_MAX_ENUM};
 };
 
-/// VulkanHostMemoryBuffer mapped into a descriptor set and a binding.
-using ResourceData =
-    llvm::DenseMap<DescriptorSetIndex,
-                   llvm::DenseMap<BindingIndex, VulkanHostMemoryBuffer>>;
-
-/// StorageClass mapped into a descriptor set and a binding.
-using ResourceStorageClassBindingMap =
-    llvm::DenseMap<DescriptorSetIndex,
-                   llvm::DenseMap<BindingIndex, mlir::spirv::StorageClass>>;
-
 struct Action {
   virtual ~Action() {}
 };
@@ -147,16 +137,15 @@ public:
 
   void addLaunchActionToSchedule();
 
-//  void createMemoryTransferAction(uint64_t src_index, uint64_t src_binding,
-//                                  uint64_t dst_index, uint64_t dst_binding);
-//
-//  void createMemoryTransferAction(VkBuffer src, VkBuffer dst, size_t size);
-
   void run();
 
-  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex, vulkanBuffer *newbufer);
+  vulkanBuffer *createMemoryBuffer(DescriptorSetIndex setIndex,
+                                   vulkanBuffer *newbufer);
+
   void copyDeviceBufferToHost(void *hostPtr, void *deviceBuffer);
+
   void copyHostBufferToDevice(void *srcPtr, void *deviceBuffer);
+
   void deallocDeviceBuffer(void *buffer);
 
 private:
