@@ -279,7 +279,7 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkScheduleFunc,
-      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {},
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
