@@ -16,6 +16,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "mlir/include/mlir/IR/Function.h"
 #include "pmlc/conversion/comp_to_vulkanCall/pass_detail.h"
 #include "pmlc/conversion/comp_to_vulkanCall/utils.h"
 #include "pmlc/dialect/comp/ir/dialect.h"
@@ -56,12 +57,26 @@ public:
 
 void ConvertCompToVulkanCall::runOnOperation() {
   mlir::ModuleOp module = getOperation();
+  mlir::MLIRContext *context = &getContext();
+
+  // add the submit op for vulkan run;
+  unsigned scheduleFuncNum = 0, lastScheduleFunc = 0;
+  auto funcOp = mlir::cast<mlir::FuncOp>(module.getBodyRegion().front().front());
+  funcOp.walk([&](comp::ScheduleFunc op) { scheduleFuncNum++; });
+  funcOp.walk([&](comp::ScheduleFunc op) {
+    if (scheduleFuncNum-1 == lastScheduleFunc++){
+      mlir::OpBuilder builder(context);
+      builder.setInsertionPointAfter(op.getOperation());
+      builder.create<comp::Submit>(builder.getUnknownLoc(), op.execEnv());
+    }
+  });
+
   // Serialize SPIRV kernels.
   BinaryModulesMap modulesMap;
-  if (mlir::failed(serializeSpirvKernels(module, modulesMap)))
+  if (mlir::failed(serializeSpirvKernels(module, modulesMap))) {
     return signalPassFailure();
+  }
   // Populate conversion patterns.
-  mlir::MLIRContext *context = &getContext();
   mlir::TypeConverter typeConverter, signatureConverter;
   mlir::OwningRewritePatternList patterns;
   populateCommonPatterns(context, typeConverter, signatureConverter, patterns);
@@ -74,8 +89,10 @@ void ConvertCompToVulkanCall::runOnOperation() {
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) -> bool {
     return signatureConverter.isSignatureLegal(op.getType());
   });
-  if (mlir::failed(mlir::applyPartialConversion(module, target, patterns)))
+  if (mlir::failed(mlir::applyPartialConversion(module, target, patterns))) {
     signalPassFailure();
+  }
+
   // Insert runtime function declarations.
   addCommonFunctionDeclarations(module);
   addVkFunctionDeclarations(module);
@@ -246,12 +263,12 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkBarrier,
       LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr, llvmInt32},
-          /*isVarArg=*/true));
+                                    /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkWait,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt32},
-          /*isVarArg=*/true));
+                                    /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkWrite,
@@ -268,7 +285,7 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkDealloc,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr, llvmInt8Ptr},
-          /*isVarArg=*/false));
+                                    /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kCreateVulkanMemoryTransferAction,
@@ -279,9 +296,8 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkAlloc,
-      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr,
-                                    {llvmInt8Ptr, llvmInt32},
-          /*isVarArg=*/false));
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr, llvmInt32},
+                                    /*isVarArg=*/false));
 
 } // namespace pmlc::conversion::comp_to_vulkanCall
 
