@@ -87,7 +87,6 @@ void VkDealloc() {}
 void VkRead() {}
 void VkWrite() {}
 void VkScheduleFunc(void *vkInvocation) {
-  printf("DBG start VkScheduleFunc\n");
   static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 

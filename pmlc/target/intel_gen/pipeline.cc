@@ -186,7 +186,7 @@ void pipelineBuilder(OpPassManager &pm) {
 
   // Convert GPU to comp.
   pm.addPass(pmlc::conversion::gpu_to_comp::createConvertGpuToCompPass(
-      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/11));
+      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/0));
   pm.addPass(comp::createExecEnvCoalescingPass());
   pm.addPass(comp::createMinimizeAllocationsPass());
 

@@ -27,8 +27,6 @@ namespace gpu = mlir::gpu;
 namespace LLVM = mlir::LLVM;
 namespace spirv = mlir::spirv;
 
-static constexpr const char *kSPIRVBinary = "SPIRV_BIN";
-
 static constexpr const char *kInitVulkan = "initVulkan";
 static constexpr const char *kDeinitVulkan = "deinitVulkan";
 static constexpr const char *kRun = "run";
@@ -510,53 +508,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
 
   LLVM::LLVMType llvmInt32Type =
       LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-  /*
-    std::vector<mlir::Value> createActionOperands{operands[0]};
-    mlir::ModuleOp module = moduleOp;
 
-    std::vector<char> binaryShader;
-    mlir::SmallVector<uint32_t, 0> binary;
-    uint64_t shader_index = 0;
-    module.dump();
-    for (auto spirvModule : module.getOps<spirv::ModuleOp>()) {
-      if (shader_index == launchFuncIndex) {
-        if (failed(spirv::serialize(spirvModule, binary))) {
-          return mlir::failure();
-        }
-      }
-      shader_index++;
-    }
-    printf("(DBGG) binary size=%lu\n", binary.size());
-
-    binaryShader.resize(binary.size() * sizeof(uint32_t));
-    std::memcpy(binaryShader.data(), reinterpret_cast<char *>(binary.data()),
-                binaryShader.size());
-
-    // createBinaryShader(module, binary);
-
-    mlir::Value ptrToSPIRVBinary = LLVM::createGlobalString(
-        loc, rewriter, kSPIRVBinary + std::to_string(launchFuncIndex),
-        {binaryShader.data(), binaryShader.size()}, LLVM::Linkage::Internal);
-
-    mlir::Value binarySize = rewriter.create<LLVM::ConstantOp>(
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(binaryShader.size()));
-
-    mlir::StringRef name = launchOp.getKernelName();
-    mlir::SmallString<16> shaderName(name.begin(), name.end());
-    // Append `\0` to follow C style string given that
-    // LLVM::createGlobalString() won't handle this directly for us.
-    shaderName.push_back('\0');
-
-    std::string entryPointGlobalName =
-        (name + "_spv_entry_point_name" +
-    std::to_string(launchFuncIndex)).str(); mlir::Value entryPointName =
-    LLVM::createGlobalString( loc, rewriter, entryPointGlobalName, shaderName,
-    LLVM::Linkage::Internal);
-
-    createActionOperands.push_back(ptrToSPIRVBinary);
-    createActionOperands.push_back(binarySize);
-    createActionOperands.push_back(entryPointName);
-  */
   auto gSize = launchOp.getGridSizeOperandValues();
   auto x = gSize.x.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
   auto y = gSize.y.getDefiningOp()->getAttrOfType<mlir::IntegerAttr>("value");
@@ -575,14 +527,14 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
         rewriter.getRemappedValue(launchOp.getKernelOperand(argI));
     bufferOperands.push_back(remappedArg);
   }
-  /*
-    mlir::Value bufferNum = rewriter.create<LLVM::ConstantOp>(
-        loc, llvmInt32Type, rewriter.getI32IntegerAttr(bufferOperands.size()));
-    createActionOperands.push_back(bufferNum);
 
-    createActionOperands.insert(createActionOperands.end(),
-                                bufferOperands.begin(), bufferOperands.end());
-  */
+  mlir::Value bufferNum = rewriter.create<LLVM::ConstantOp>(
+      loc, llvmInt32Type, rewriter.getI32IntegerAttr(bufferOperands.size()));
+  createActionOperands.push_back(bufferNum);
+
+  createActionOperands.insert(createActionOperands.end(),
+                              bufferOperands.begin(), bufferOperands.end());
+
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
       rewriter.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
