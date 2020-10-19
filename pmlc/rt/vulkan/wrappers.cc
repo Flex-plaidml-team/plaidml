@@ -87,7 +87,7 @@ void VkDealloc() {}
 void VkRead() {}
 void VkWrite() {}
 void VkScheduleFunc(void *vkInvocation) {
-  static_cast<VulkanInvocation *>(vkInvocation)->run();
+  // static_cast<VulkanInvocation *>(vkInvocation)->run();
 }
 
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
