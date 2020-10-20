@@ -200,7 +200,7 @@ struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
                       mlir::TypeConverter &typeConverter,
                       mlir::MLIRContext *context)
       : ConvertCompToVkBasePattern<comp::ScheduleFunc>(typeConverter, context),
-        modulesMap(modulesMap), moduleOp(module), numKernel(numKernel) {
+        modulesMap(modulesMap), moduleOp(module), scheduleFuncNum(numKernel) {
     pScheduleFuncIndex =
         reinterpret_cast<uint32_t *>(calloc(1, sizeof(uint32_t)));
     pBufferMap =
@@ -214,7 +214,7 @@ struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
   const BinaryModulesMap &modulesMap;
   uint32_t *pScheduleFuncIndex;
   mlir::ModuleOp moduleOp;
-  uint32_t numKernel;
+  uint32_t scheduleFuncNum;
   llvm::DenseMap<mlir::Value, llvm::SmallVector<uint64_t, 2>> *pBufferMap;
 };
 
@@ -589,8 +589,11 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       rewriter.getSymbolRefAttr(kSetVulkanLaunchKernelAction),
       mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
 
+  auto &bufferMap = *pBufferMap;
+  auto &scheduleFuncIndex = *pScheduleFuncIndex;
+
   for (size_t i = 0; i < bufferOperands.size(); i++) {
-    for (auto pair : (*pBufferMap)) {
+    for (auto pair : bufferMap) {
       if (pair.first == bufferOperands[i]) {
         mlir::Value dst_index = rewriter.create<LLVM::ConstantOp>(
             loc, llvmInt64Type,
@@ -610,8 +613,8 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       }
     }
     llvm::SmallVector<uint64_t, 2> second;
-    second.append({*pScheduleFuncIndex, i});
-    (*pBufferMap)[bufferOperands[i]] = second;
+    second.append({scheduleFuncIndex, i});
+    bufferMap[bufferOperands[i]] = second;
   }
 
   mlir::Type llvmEventType = this->convertType(op.getType());
@@ -620,13 +623,13 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       rewriter.getSymbolRefAttr(kVkScheduleFunc),
       mlir::ArrayRef<mlir::Value>{operands[0]});
 
-  if ((*pScheduleFuncIndex) == numKernel - 1) {
+  if (scheduleFuncIndex == scheduleFuncNum - 1) {
     rewriter.create<LLVM::CallOp>(loc, mlir::ArrayRef<mlir::Type>{},
                                   rewriter.getSymbolRefAttr(kRun),
                                   mlir::ArrayRef<mlir::Value>{operands[0]});
   }
 
-  (*pScheduleFuncIndex)++;
+  scheduleFuncIndex++;
   return mlir::success();
 }
 
