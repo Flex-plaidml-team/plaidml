@@ -87,7 +87,7 @@ void *VkAlloc(void *vkInvocation, uint32_t bytes, void *hostPtr) {
 }
 
 void VkDealloc(void *invocation, void *memory) {
-  static_cast<VulkanInvocation *>(invocation)->deallocDeviceBuffer(memory);
+//  static_cast<VulkanInvocation *>(invocation)->deallocDeviceBuffer(memory);
 }
 
 void *VkRead(void *dst, void *src, void *invocation, uint32_t count, ...) {

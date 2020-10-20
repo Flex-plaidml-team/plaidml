@@ -62,6 +62,13 @@ VulkanInvocation::~VulkanInvocation() {
   }
 
   for (auto buffer : deviceBufferPool){
+    auto vulkanDeviceMemoryBuffer = buffer->devBuffer;
+    if (vulkanDeviceMemoryBuffer.deviceMemory){
+      vkFreeMemory(device->getDevice(), vulkanDeviceMemoryBuffer.deviceMemory,
+                   nullptr);
+      vkDestroyBuffer(device->getDevice(), vulkanDeviceMemoryBuffer.buffer,
+                      nullptr);
+    }
     delete buffer;
   }
 }
