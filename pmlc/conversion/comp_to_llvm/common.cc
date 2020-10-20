@@ -45,7 +45,6 @@ mlir::LogicalResult serializeSpirvKernels(mlir::ModuleOp &op,
         std::string binaryName = kSpirvBinPrefix + gpuModuleName;
 
         // Serialize spirv module.
-
         mlir::SmallVector<uint32_t, 0> moduleBinary;
         if (mlir::failed(spirv::serialize(moduleOp, moduleBinary)))
           return mlir::WalkResult::interrupt();

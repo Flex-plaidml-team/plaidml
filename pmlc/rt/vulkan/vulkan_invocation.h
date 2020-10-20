@@ -121,9 +121,6 @@ struct LaunchKernelAction : Action {
   ResourceStorageClassBindingMap resourceStorageClassData;
 
   llvm::SmallVector<VkBufferMemoryBarrier, 4> deps;
-
-  uint32_t desIndex = 0;
-  uint32_t bindIndex = 0;
 };
 
 struct MemoryTransferAction : Action {
