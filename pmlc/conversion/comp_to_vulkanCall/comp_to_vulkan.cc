@@ -295,7 +295,8 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkAlloc,
-      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr, llvmInt32},
+      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr,
+                                    {llvmInt8Ptr, llvmInt32, llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
 } // namespace pmlc::conversion::comp_to_vulkanCall
