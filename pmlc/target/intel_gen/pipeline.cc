@@ -137,7 +137,7 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCSEPass());
 
   // Do subgroup or accumulation
-  pm.addPass(pmlc::dialect::pxa::createSubgroupsPass());
+  // pm.addPass(pmlc::dialect::pxa::createSubgroupsPass());
   pm.addPass(pmlc::dialect::pxa::createAffineNormalizePass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());

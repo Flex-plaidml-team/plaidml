@@ -27,16 +27,15 @@ namespace gpu = mlir::gpu;
 namespace LLVM = mlir::LLVM;
 namespace spirv = mlir::spirv;
 
-static constexpr const char *kInitVulkan = "initVulkan";
-static constexpr const char *kDeinitVulkan = "deinitVulkan";
-static constexpr const char *kRun = "run";
-static constexpr const char *kCreateVulkanLaunchKernelAction =
-    "createVulkanLaunchKernelAction";
-static constexpr const char *kSetVulkanLaunchKernelAction =
-    "setVulkanLaunchKernelAction";
-static constexpr const char *kCreateVulkanMemoryTransferAction =
-    "createVulkanMemoryTransferAction";
-static constexpr const char *kVkBarrier = "VkBarrier";
+static constexpr const char *kVkInit = "vkInit";
+static constexpr const char *kVkDeinit = "vkDeinit";
+static constexpr const char *kVkRun = "vkRun";
+static constexpr const char *kVkCreateLaunchKernelAction =
+    "vkCreateLaunchKernelAction";
+static constexpr const char *kVkSetLaunchKernelAction =
+    "vkSetLaunchKernelAction";
+static constexpr const char *kVkCreateMemoryTransferAction =
+    "vkCreateMemoryTransferAction";
 static constexpr const char *kVkWait = "VkWait";
 static constexpr const char *kVkScheduleFunc = "VkScheduleFunc";
 
@@ -153,7 +152,6 @@ struct ConvertToFuncCallPattern : ConvertCompToVkBasePattern<Op> {
 using ConvertToInitVulkan = ConvertToFuncCallPattern<comp::CreateExecEnv>;
 using ConvertToDeinitVulkan = ConvertToFuncCallPattern<comp::DestroyExecEnv>;
 using ConvertWait = ConvertToFuncCallPattern<comp::Wait>;
-using ConvertScheduleBarrier = ConvertToFuncCallPattern<comp::ScheduleBarrier>;
 
 struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
   ConvertScheduleFunc(const BinaryModulesMap &modulesMap,
@@ -196,12 +194,10 @@ void populateCompToVkPatterns(mlir::MLIRContext *context,
       [=](comp::EventType eventType) -> mlir::Optional<mlir::Type> {
         return llvmInt8Ptr;
       });
-  patterns.insert<ConvertToInitVulkan>(kInitVulkan, typeConverter, context);
-  patterns.insert<ConvertToDeinitVulkan>(kDeinitVulkan, typeConverter, context);
+  patterns.insert<ConvertToInitVulkan>(kVkInit, typeConverter, context);
+  patterns.insert<ConvertToDeinitVulkan>(kVkDeinit, typeConverter, context);
   patterns.insert<ConvertScheduleFunc>(modulesMap, module, numKernel,
                                        typeConverter, context);
-  patterns.insert<ConvertScheduleBarrier>(kVkBarrier, typeConverter, context,
-                                          /*varArg=*/true, /*nonVarArgs=*/1);
   patterns.insert<ConvertWait>(kVkWait, typeConverter, context,
                                /*varArg=*/true, /*nonVarArgs=*/0);
 }
@@ -216,12 +212,12 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
   LLVM::LLVMType llvmInt64Type = LLVM::LLVMType::getInt64Ty(context);
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kInitVulkan,
+      loc, kVkInit,
       LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kCreateVulkanLaunchKernelAction,
+      loc, kVkCreateLaunchKernelAction,
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt8Ptr, llvmInt32,
                                      llvmInt8Ptr, llvmInt32, llvmInt32,
@@ -229,12 +225,12 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kSetVulkanLaunchKernelAction,
+      loc, kVkSetLaunchKernelAction,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr, llvmInt32},
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kRun,
+      loc, kVkRun,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
@@ -244,14 +240,9 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kDeinitVulkan,
+      loc, kVkDeinit,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
-
-  builder.create<LLVM::LLVMFuncOp>(
-      loc, kVkBarrier,
-      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr, {llvmInt8Ptr, llvmInt32},
-                                    /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
       loc, kVkWait,
@@ -259,7 +250,7 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kCreateVulkanMemoryTransferAction,
+      loc, kVkCreateMemoryTransferAction,
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt64Type, llvmInt64Type,
                                      llvmInt64Type, llvmInt64Type},
@@ -387,7 +378,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   mlir::Value descriptorSet = rewriter.create<LLVM::ConstantOp>(
       loc, llvmInt32Ty, rewriter.getI32IntegerAttr(0));
 
-  // for (auto buffer : bufferOperands) {
+  // Bind all buffers to Vulkan LaunchKernelAction.
   for (uint32_t bindIndex = 0; bindIndex < bufferOperands.size(); bindIndex++) {
     auto buffer = bufferOperands[bindIndex];
     // Create LLVM constant for the descriptor binding index.
@@ -408,13 +399,11 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
     auto elementType = memRefType.getElementType();
     uint32_t elementTypeSize =
         llvm::divideCeil(elementType.getIntOrFloatBitWidth(), kByteBits);
-
     mlir::Value bufferByteSize = rewriter.create<LLVM::ConstantOp>(
         loc, llvmInt32Ty,
         rewriter.getI32IntegerAttr(numElement * elementTypeSize));
     mlir::Value unrankedBuffer = rewriter.create<mlir::MemRefCastOp>(
         loc, buffer, mlir::UnrankedMemRefType::get(elementType, 0));
-
     rewriter.create<mlir::CallOp>(
         loc, mlir::ArrayRef<mlir::Type>{},
         rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
@@ -425,7 +414,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
 
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
-      rewriter.getSymbolRefAttr(kCreateVulkanLaunchKernelAction),
+      rewriter.getSymbolRefAttr(kVkCreateLaunchKernelAction),
       createActionOperands);
 
   // Set kernel arguments.
@@ -434,12 +423,12 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
 
   rewriter.create<LLVM::CallOp>(
       loc, mlir::ArrayRef<mlir::Type>{},
-      rewriter.getSymbolRefAttr(kSetVulkanLaunchKernelAction),
+      rewriter.getSymbolRefAttr(kVkSetLaunchKernelAction),
       mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
 
+  // Create Vulkan MemoryTransferAction
   auto &bufferMap = *pBufferMap;
   auto &scheduleFuncIndex = *pScheduleFuncIndex;
-
   for (size_t i = 0; i < bufferOperands.size(); i++) {
     for (auto pair : bufferMap) {
       if (pair.first == bufferOperands[i]) {
@@ -452,10 +441,9 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
             loc, llvmInt64Type, rewriter.getI64IntegerAttr(pair.second[0]));
         mlir::Value src_binding = rewriter.create<LLVM::ConstantOp>(
             loc, llvmInt64Type, rewriter.getI64IntegerAttr(pair.second[1]));
-
         rewriter.create<LLVM::CallOp>(
             loc, mlir::ArrayRef<mlir::Type>{},
-            rewriter.getSymbolRefAttr(kCreateVulkanMemoryTransferAction),
+            rewriter.getSymbolRefAttr(kVkCreateMemoryTransferAction),
             mlir::ArrayRef<mlir::Value>{operands[0], src_index, src_binding,
                                         dst_index, dst_binding});
       }
@@ -473,7 +461,7 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
 
   if (scheduleFuncIndex == scheduleFuncNum - 1) {
     rewriter.create<LLVM::CallOp>(loc, mlir::ArrayRef<mlir::Type>{},
-                                  rewriter.getSymbolRefAttr(kRun),
+                                  rewriter.getSymbolRefAttr(kVkRun),
                                   mlir::ArrayRef<mlir::Value>{operands[0]});
   }
 
