@@ -13,6 +13,11 @@ namespace pmlc::ast {
 
 bool isAmbiguousDataType(util::DataType dtype);
 
+util::DataType inferElementType(llvm::ArrayRef<util::TensorShape> shapes);
+
+util::TensorShape inferShape(llvm::ArrayRef<util::TensorShape> operands,
+                             util::DataType override = util::DataType::invalid);
+
 //
 // Evaluator
 //
@@ -32,6 +37,8 @@ public:
   llvm::ArrayRef<util::TensorShape> getShapes(const ExprNode *node);
 
   void verify(const ExprNodePtr &node);
+
+  void bindDims(const ExprNodePtr &node, llvm::ArrayRef<DimNodePtr *> into);
 
 private:
   util::TensorShapes computeShapes(const ExprNode *node);
