@@ -72,12 +72,13 @@ void setVulkanLaunchKernelAction(void *vkInvocation, uint32_t subgroupSize) {
       ->setLaunchKernelAction(subgroupSize);
 }
 
-void addVulkanLaunchActionToSchedule(void *vkInvocation) {
-  static_cast<VulkanInvocation *>(vkInvocation)->addLaunchActionToSchedule();
-}
-
 void run(void *vkInvocation) {
   static_cast<VulkanInvocation *>(vkInvocation)->run();
+}
+
+void *VkScheduleFunc(void *vkInvocation) {
+  static_cast<VulkanInvocation *>(vkInvocation)->addLaunchActionToSchedule();
+  return nullptr;
 }
 
 void VkBarrier() {}
@@ -86,9 +87,6 @@ void *VkAlloc() { return nullptr; }
 void VkDealloc() {}
 void VkRead() {}
 void VkWrite() {}
-void VkScheduleFunc(void *vkInvocation) {
-  // static_cast<VulkanInvocation *>(vkInvocation)->run();
-}
 
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
@@ -128,8 +126,6 @@ struct Registration {
                    reinterpret_cast<void *>(createVulkanMemoryTransferAction));
     registerSymbol("setVulkanLaunchKernelAction",
                    reinterpret_cast<void *>(setVulkanLaunchKernelAction));
-    registerSymbol("addVulkanLaunchActionToSchedule",
-                   reinterpret_cast<void *>(addVulkanLaunchActionToSchedule));
     registerSymbol("run", reinterpret_cast<void *>(run));
     registerSymbol("_mlir_ciface_bindBufferFloat16",
                    reinterpret_cast<void *>(_mlir_ciface_bindBufferFloat16));

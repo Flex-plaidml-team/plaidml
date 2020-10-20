@@ -201,8 +201,9 @@ struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
                       mlir::MLIRContext *context)
       : ConvertCompToVkBasePattern<comp::ScheduleFunc>(typeConverter, context),
         modulesMap(modulesMap), moduleOp(module), numKernel(numKernel) {
-    launchFuncIndex = reinterpret_cast<uint32_t *>(calloc(1, sizeof(uint32_t)));
-    bufferMap =
+    pScheduleFuncIndex =
+        reinterpret_cast<uint32_t *>(calloc(1, sizeof(uint32_t)));
+    pBufferMap =
         new llvm::DenseMap<mlir::Value, llvm::SmallVector<uint64_t, 2>>();
   }
 
@@ -211,10 +212,10 @@ struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
                   mlir::ConversionPatternRewriter &rewriter) const override;
 
   const BinaryModulesMap &modulesMap;
-  uint32_t *launchFuncIndex = 0;
+  uint32_t *pScheduleFuncIndex;
   mlir::ModuleOp moduleOp;
   uint32_t numKernel;
-  llvm::DenseMap<mlir::Value, llvm::SmallVector<uint64_t, 2>> *bufferMap;
+  llvm::DenseMap<mlir::Value, llvm::SmallVector<uint64_t, 2>> *pBufferMap;
 };
 
 } // namespace
@@ -589,10 +590,11 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       mlir::ArrayRef<mlir::Value>{operands[0], subgroupSizeVal});
 
   for (size_t i = 0; i < bufferOperands.size(); i++) {
-    for (auto pair : (*bufferMap)) {
+    for (auto pair : (*pBufferMap)) {
       if (pair.first == bufferOperands[i]) {
         mlir::Value dst_index = rewriter.create<LLVM::ConstantOp>(
-            loc, llvmInt64Type, rewriter.getI64IntegerAttr(*launchFuncIndex));
+            loc, llvmInt64Type,
+            rewriter.getI64IntegerAttr(*pScheduleFuncIndex));
         mlir::Value dst_binding = rewriter.create<LLVM::ConstantOp>(
             loc, llvmInt64Type, rewriter.getI64IntegerAttr(i));
         mlir::Value src_index = rewriter.create<LLVM::ConstantOp>(
@@ -608,19 +610,8 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       }
     }
     llvm::SmallVector<uint64_t, 2> second;
-    second.append({*launchFuncIndex, i});
-    (*bufferMap)[bufferOperands[i]] = second;
-  }
-
-  rewriter.create<LLVM::CallOp>(
-      loc, mlir::ArrayRef<mlir::Type>{},
-      rewriter.getSymbolRefAttr(kAddVulkanLaunchActionToSchedule),
-      mlir::ArrayRef<mlir::Value>{operands[0]});
-
-  if ((*launchFuncIndex) == numKernel - 1) {
-    rewriter.create<LLVM::CallOp>(loc, mlir::ArrayRef<mlir::Type>{},
-                                  rewriter.getSymbolRefAttr(kRun),
-                                  mlir::ArrayRef<mlir::Value>{operands[0]});
+    second.append({*pScheduleFuncIndex, i});
+    (*pBufferMap)[bufferOperands[i]] = second;
   }
 
   mlir::Type llvmEventType = this->convertType(op.getType());
@@ -629,7 +620,13 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
       rewriter.getSymbolRefAttr(kVkScheduleFunc),
       mlir::ArrayRef<mlir::Value>{operands[0]});
 
-  (*launchFuncIndex)++;
+  if ((*pScheduleFuncIndex) == numKernel - 1) {
+    rewriter.create<LLVM::CallOp>(loc, mlir::ArrayRef<mlir::Type>{},
+                                  rewriter.getSymbolRefAttr(kRun),
+                                  mlir::ArrayRef<mlir::Value>{operands[0]});
+  }
+
+  (*pScheduleFuncIndex)++;
   return mlir::success();
 }
 

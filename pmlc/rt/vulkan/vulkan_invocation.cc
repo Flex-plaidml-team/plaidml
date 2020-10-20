@@ -36,10 +36,6 @@ VulkanInvocation::~VulkanInvocation() {
   // corresponding vkCreate* or vkAllocate* command."
   vkDeviceWaitIdle(device->getDevice());
 
-  releaseResources();
-}
-
-void VulkanInvocation::releaseResources() {
   // Free and destroy.
   vkFreeCommandBuffers(device->getDevice(), commandPool, commandBuffers.size(),
                        commandBuffers.data());
@@ -278,10 +274,8 @@ void VulkanInvocation::getQueryPoolResults() {
 void VulkanInvocation::run() {
   createSchedule();
   submitCommandBuffersToQueue();
-  if (vkQueueWaitIdle(device->getQueue()) != VK_SUCCESS) {
-    // releaseResources();
-    return;
-  }
+  throwOnVulkanError(vkQueueWaitIdle(device->getQueue()), "vkQueueWaitIdle");
+
   if (device->getTimestampValidBits()) {
     getQueryPoolResults();
   }
