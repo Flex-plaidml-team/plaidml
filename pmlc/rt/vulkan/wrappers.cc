@@ -85,10 +85,6 @@ void *VkScheduleFunc(void *vkInvocation) {
 
 void VkBarrier() {}
 void VkWait() {}
-void VkAlloc() {}
-void VkDealloc() {}
-void VkRead() {}
-void VkWrite() {}
 
 #define BIND_BUFFER_IMPL(_name_, _type_)                                       \
   void _mlir_ciface_bindBuffer##_name_(                                        \
@@ -148,10 +144,6 @@ struct Registration {
                    reinterpret_cast<void *>(_mlir_ciface_fillResourceFloat32));
     registerSymbol("VkBarrier", reinterpret_cast<void *>(VkBarrier));
     registerSymbol("VkWait", reinterpret_cast<void *>(VkWait));
-    registerSymbol("VkAlloc", reinterpret_cast<void *>(VkAlloc));
-    registerSymbol("VkDealloc", reinterpret_cast<void *>(VkDealloc));
-    registerSymbol("VkRead", reinterpret_cast<void *>(VkRead));
-    registerSymbol("VkWrite", reinterpret_cast<void *>(VkWrite));
     registerSymbol("VkScheduleFunc", reinterpret_cast<void *>(VkScheduleFunc));
   }
 };

@@ -36,15 +36,9 @@ static constexpr const char *kSetVulkanLaunchKernelAction =
     "setVulkanLaunchKernelAction";
 static constexpr const char *kCreateVulkanMemoryTransferAction =
     "createVulkanMemoryTransferAction";
-static constexpr const char *kAddVulkanLaunchActionToSchedule =
-    "addVulkanLaunchActionToSchedule";
 static constexpr const char *kVkBarrier = "VkBarrier";
 static constexpr const char *kVkWait = "VkWait";
-static constexpr const char *kVkDealloc = "VkDealloc";
-static constexpr const char *kVkRead = "VkRead";
-static constexpr const char *kVkWrite = "VkWrite";
 static constexpr const char *kVkScheduleFunc = "VkScheduleFunc";
-static constexpr const char *kVkAlloc = "VkAlloc";
 
 static constexpr const char *kBindBufferBFloat16 = "bindBufferBFloat16";
 static constexpr const char *kBindBufferFloat16 = "bindBufferFloat16";
@@ -158,41 +152,8 @@ struct ConvertToFuncCallPattern : ConvertCompToVkBasePattern<Op> {
 
 using ConvertToInitVulkan = ConvertToFuncCallPattern<comp::CreateExecEnv>;
 using ConvertToDeinitVulkan = ConvertToFuncCallPattern<comp::DestroyExecEnv>;
-using ConvertToCommandBufferSubmit = ConvertToFuncCallPattern<comp::Submit>;
-
-// TODO dont open those api on vulkan backend;
 using ConvertWait = ConvertToFuncCallPattern<comp::Wait>;
 using ConvertScheduleBarrier = ConvertToFuncCallPattern<comp::ScheduleBarrier>;
-using ConvertDealloc = ConvertToFuncCallPattern<comp::Dealloc>;
-
-/// Template pattern common for both comp::ScheduleRead and
-/// comp::ScheduleWrite.
-template <class Op>
-struct ConvertScheduleReadWrite : ConvertCompToVkBasePattern<Op> {
-  ConvertScheduleReadWrite(mlir::StringRef funcName,
-                           mlir::TypeConverter &typeConverter,
-                           mlir::MLIRContext *context)
-      : ConvertCompToVkBasePattern<Op>(typeConverter, context),
-        funcName(funcName) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(Op op, mlir::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-
-  mlir::StringRef funcName;
-};
-
-using ConvertScheduleRead = ConvertScheduleReadWrite<comp::ScheduleRead>;
-
-using ConvertScheduleWrite = ConvertScheduleReadWrite<comp::ScheduleWrite>;
-
-struct ConvertAlloc : ConvertCompToVkBasePattern<comp::Alloc> {
-  using ConvertCompToVkBasePattern<comp::Alloc>::ConvertCompToVkBasePattern;
-
-  mlir::LogicalResult
-  matchAndRewrite(comp::Alloc op, mlir::ArrayRef<mlir::Value> operands,
-                  mlir::ConversionPatternRewriter &rewriter) const override;
-};
 
 struct ConvertScheduleFunc : ConvertCompToVkBasePattern<comp::ScheduleFunc> {
   ConvertScheduleFunc(const BinaryModulesMap &modulesMap,
@@ -237,20 +198,12 @@ void populateCompToVkPatterns(mlir::MLIRContext *context,
       });
   patterns.insert<ConvertToInitVulkan>(kInitVulkan, typeConverter, context);
   patterns.insert<ConvertToDeinitVulkan>(kDeinitVulkan, typeConverter, context);
-  patterns.insert<ConvertToCommandBufferSubmit>(kRun, typeConverter, context);
-
   patterns.insert<ConvertScheduleFunc>(modulesMap, module, numKernel,
                                        typeConverter, context);
-  patterns.insert<ConvertAlloc>(typeConverter, context);
-
-  patterns.insert<ConvertDealloc>(kVkDealloc, typeConverter, context);
   patterns.insert<ConvertScheduleBarrier>(kVkBarrier, typeConverter, context,
                                           /*varArg=*/true, /*nonVarArgs=*/1);
   patterns.insert<ConvertWait>(kVkWait, typeConverter, context,
                                /*varArg=*/true, /*nonVarArgs=*/0);
-
-  patterns.insert<ConvertScheduleRead>(kVkRead, typeConverter, context);
-  patterns.insert<ConvertScheduleWrite>(kVkWrite, typeConverter, context);
 }
 
 void addVkFunctionDeclarations(mlir::ModuleOp &module) {
@@ -281,11 +234,6 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/false));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kAddVulkanLaunchActionToSchedule,
-      LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr},
-                                    /*isVarArg=*/false));
-
-  builder.create<LLVM::LLVMFuncOp>(
       loc, kRun,
       LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr},
                                     /*isVarArg=*/false));
@@ -311,33 +259,10 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
                                     /*isVarArg=*/true));
 
   builder.create<LLVM::LLVMFuncOp>(
-      loc, kVkWrite,
-      LLVM::LLVMType::getFunctionTy(
-          llvmInt8Ptr, {llvmInt8Ptr, llvmInt8Ptr, llvmInt8Ptr, llvmInt32},
-          /*isVarArg=*/true));
-
-  builder.create<LLVM::LLVMFuncOp>(
-      loc, kVkRead,
-      LLVM::LLVMType::getFunctionTy(
-          llvmInt8Ptr, {llvmInt8Ptr, llvmInt8Ptr, llvmInt8Ptr, llvmInt32},
-          /*isVarArg=*/true));
-
-  builder.create<LLVM::LLVMFuncOp>(
-      loc, kVkDealloc,
-      LLVM::LLVMType::getFunctionTy(llvmVoid, {llvmInt8Ptr, llvmInt8Ptr},
-                                    /*isVarArg=*/false));
-
-  builder.create<LLVM::LLVMFuncOp>(
       loc, kCreateVulkanMemoryTransferAction,
       LLVM::LLVMType::getFunctionTy(llvmVoid,
                                     {llvmInt8Ptr, llvmInt64Type, llvmInt64Type,
                                      llvmInt64Type, llvmInt64Type},
-                                    /*isVarArg=*/false));
-
-  builder.create<LLVM::LLVMFuncOp>(
-      loc, kVkAlloc,
-      LLVM::LLVMType::getFunctionTy(llvmInt8Ptr,
-                                    {llvmInt8Ptr, llvmInt32, llvmInt8Ptr},
                                     /*isVarArg=*/false));
 
   std::vector<std::pair<const char *, mlir::Type>> bindType{
@@ -395,96 +320,6 @@ mlir::LogicalResult ConvertToFuncCallPattern<Op>::matchAndRewrite(
   rewriter.replaceOpWithNewOp<LLVM::CallOp>(op.getOperation(), convertedTypes,
                                             rewriter.getSymbolRefAttr(funcName),
                                             newOperands);
-  return mlir::success();
-}
-
-template <class Op>
-mlir::LogicalResult ConvertScheduleReadWrite<Op>::matchAndRewrite(
-    Op op, mlir::ArrayRef<mlir::Value> operands,
-    mlir::ConversionPatternRewriter &rewriter) const {
-  if (!this->isMatchingRuntime(op)) {
-    return mlir::failure();
-  }
-
-  constexpr unsigned nonVarArgs = 3;
-  mlir::SmallVector<mlir::Value, nonVarArgs + 2> castOperands(
-      operands.begin(), operands.begin() + nonVarArgs);
-
-  // Convert host memref to pointer.
-  mlir::Value hostPtr =
-      this->materializeConversion(rewriter, op.getLoc(), operands[0]);
-  if (!hostPtr) {
-    return mlir::failure();
-  }
-  castOperands[0] = hostPtr;
-
-  // Add event dependencies as variadic operands.
-  LLVM::LLVMType llvmInt32Ty =
-      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-  mlir::Value eventsCnt = rewriter.create<LLVM::ConstantOp>(
-      op.getLoc(), llvmInt32Ty,
-      rewriter.getI32IntegerAttr(operands.size() - nonVarArgs));
-  castOperands.push_back(eventsCnt);
-  castOperands.insert(castOperands.end(), operands.begin() + nonVarArgs,
-                      operands.end());
-
-  mlir::Type llvmEventType = this->convertType(op.getType());
-  rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-      op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmEventType},
-      rewriter.getSymbolRefAttr(funcName), castOperands);
-  return mlir::success();
-}
-
-mlir::LogicalResult
-ConvertAlloc::matchAndRewrite(comp::Alloc op,
-                              mlir::ArrayRef<mlir::Value> operands,
-                              mlir::ConversionPatternRewriter &rewriter) const {
-  if (!isMatchingRuntime(op)) {
-    return mlir::failure();
-  }
-
-  mlir::Location loc = op.getLoc();
-
-  LLVM::LLVMType llvmInt32Ty =
-      LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-  mlir::MLIRContext *context = rewriter.getContext();
-  LLVM::LLVMType llvmInt8Ptr = LLVM::LLVMType::getInt8PtrTy(context);
-
-  mlir::Value descriptorSet = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Ty, rewriter.getI32IntegerAttr(0));
-
-  auto buffer = op.hostMem();
-
-  auto memRefType = buffer.getType().dyn_cast_or_null<mlir::MemRefType>();
-  if (!memRefType) {
-    return mlir::failure();
-  }
-
-  auto shape = memRefType.getShape();
-  uint32_t numElement = 1;
-  for (auto dim : shape) {
-    numElement *= dim;
-  }
-
-  auto elementType = memRefType.getElementType();
-  uint32_t elementTypeSize =
-      llvm::divideCeil(elementType.getIntOrFloatBitWidth(), kByteBits);
-
-  mlir::Value bufferByteSize = rewriter.create<LLVM::ConstantOp>(
-      loc, llvmInt32Ty,
-      rewriter.getI32IntegerAttr(numElement * elementTypeSize));
-  mlir::Value unrankedBuffer = rewriter.create<mlir::MemRefCastOp>(
-      loc, buffer, mlir::UnrankedMemRefType::get(elementType, 0));
-
-  rewriter.create<mlir::CallOp>(
-      loc, mlir::ArrayRef<mlir::Type>{},
-      rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
-      mlir::ArrayRef<mlir::Value>{operands[0], bufferByteSize, unrankedBuffer});
-
-  rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-      op.getOperation(), mlir::ArrayRef<mlir::Type>{llvmInt8Ptr},
-      rewriter.getSymbolRefAttr(kVkAlloc),
-      mlir::ArrayRef<mlir::Value>{operands[0], descriptorSet, operands[1]});
   return mlir::success();
 }
 
