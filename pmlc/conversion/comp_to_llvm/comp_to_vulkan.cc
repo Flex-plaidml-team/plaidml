@@ -92,13 +92,13 @@ public:
   void runOnOperation();
 
 private:
-  uint32_t numKernel = 0;
+  uint32_t scheduleFuncNum = 0;
 };
 
 void ConvertCompToVulkanCall::runOnOperation() {
   mlir::ModuleOp module = getOperation();
 
-  module.walk([this](comp::ScheduleFunc op) { numKernel++; });
+  module.walk([this](comp::ScheduleFunc op) { scheduleFuncNum++; });
 
   // Serialize SPIRV kernels.
   BinaryModulesMap modulesMap;
@@ -109,7 +109,7 @@ void ConvertCompToVulkanCall::runOnOperation() {
   mlir::TypeConverter typeConverter, signatureConverter;
   mlir::OwningRewritePatternList patterns;
   populateCommonPatterns(context, typeConverter, signatureConverter, patterns);
-  populateCompToVkPatterns(context, modulesMap, module, numKernel,
+  populateCompToVkPatterns(context, modulesMap, module, scheduleFuncNum,
                            typeConverter, patterns);
   // Set conversion target.
   mlir::ConversionTarget target(*context);
@@ -354,7 +354,7 @@ void addVkFunctionDeclarations(mlir::ModuleOp &module) {
         loc, func.first,
         mlir::FunctionType::get(
             {mlir::ArrayRef<mlir::Type>{
-                llvmInt8Ptr, llvmInt32,
+                llvmInt8Ptr, llvmInt32, llvmInt32, llvmInt32,
                 mlir::UnrankedMemRefType::get(func.second, /*memorySpace=*/0)}},
             {}, context),
         mlir::ArrayRef<std::pair<mlir::Identifier, mlir::Attribute>>());
@@ -546,7 +546,19 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
   LLVM::LLVMType llvmInt64Type =
       LLVM::LLVMType::getInt64Ty(rewriter.getContext());
 
-  for (auto buffer : bufferOperands) {
+  // Create LLVM constant for the descriptor set index.
+  // Bind all memrefs to the `0` descriptor set, the same way as `GPUToSPIRV`
+  // pass does.
+  mlir::Value descriptorSet = rewriter.create<LLVM::ConstantOp>(
+      loc, llvmInt32Ty, rewriter.getI32IntegerAttr(0));
+
+  // for (auto buffer : bufferOperands) {
+  for (uint32_t bindIndex = 0; bindIndex < bufferOperands.size(); bindIndex++) {
+    auto buffer = bufferOperands[bindIndex];
+    // Create LLVM constant for the descriptor binding index.
+    mlir::Value descriptorBinding = rewriter.create<LLVM::ConstantOp>(
+        loc, llvmInt32Ty, rewriter.getI32IntegerAttr(bindIndex));
+
     auto memRefType = buffer.getType().dyn_cast_or_null<mlir::MemRefType>();
     if (!memRefType) {
       return mlir::failure();
@@ -571,7 +583,8 @@ mlir::LogicalResult ConvertScheduleFunc::matchAndRewrite(
     rewriter.create<mlir::CallOp>(
         loc, mlir::ArrayRef<mlir::Type>{},
         rewriter.getSymbolRefAttr(getBufferBindingFunc(elementType)),
-        mlir::ArrayRef<mlir::Value>{operands[0], bufferByteSize,
+        mlir::ArrayRef<mlir::Value>{operands[0], descriptorSet,
+                                    descriptorBinding, bufferByteSize,
                                     unrankedBuffer});
   }
 

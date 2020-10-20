@@ -108,6 +108,7 @@ void VulkanInvocation::setLaunchKernelAction(uint32_t subgroupSize) {
   if (!curr) {
     throw std::runtime_error{"current LaunchKernelAction has not been created"};
   }
+
   // Create logical device, shader module and memory buffers.
   checkResourceData();
   createMemoryBuffers();
@@ -119,7 +120,9 @@ void VulkanInvocation::setLaunchKernelAction(uint32_t subgroupSize) {
   initDescriptorSetLayoutBindingMap();
   createDescriptorSetLayout();
   createPipelineLayout();
+
   createComputePipeline(subgroupSize);
+
   // Each descriptor set must be allocated from a descriptor pool.
   createDescriptorPool();
   allocateDescriptorSets();
@@ -283,14 +286,14 @@ void VulkanInvocation::run() {
 }
 
 void VulkanInvocation::setResourceData(
+    const DescriptorSetIndex desIndex, const BindingIndex bindIndex,
     const VulkanHostMemoryBuffer &hostMemBuffer) {
   if (!curr) {
     curr = std::make_shared<LaunchKernelAction>();
   }
-  curr->resourceData[curr->desIndex][curr->bindIndex] = hostMemBuffer;
-  curr->resourceStorageClassData[curr->desIndex][curr->bindIndex] =
+  curr->resourceData[desIndex][bindIndex] = hostMemBuffer;
+  curr->resourceStorageClassData[desIndex][bindIndex] =
       mlir::spirv::StorageClass::StorageBuffer;
-  curr->bindIndex = curr->bindIndex + 1;
 }
 
 void VulkanInvocation::mapStorageClassToDescriptorType(

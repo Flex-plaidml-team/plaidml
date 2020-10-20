@@ -121,8 +121,6 @@ struct LaunchKernelAction : Action {
   ResourceStorageClassBindingMap resourceStorageClassData;
 
   llvm::SmallVector<VkBufferMemoryBarrier, 4> deps;
-  uint32_t bindIndex;
-  uint32_t desIndex;
 };
 
 struct MemoryTransferAction : Action {
@@ -155,7 +153,9 @@ public:
   void run();
 
   /// Sets needed data for Vulkan device.
-  void setResourceData(const VulkanHostMemoryBuffer &hostMemBuffer);
+  void setResourceData(const DescriptorSetIndex desIndex,
+                       const BindingIndex bindIndex,
+                       const VulkanHostMemoryBuffer &hostMemBuffer);
 
 private:
   void mapStorageClassToDescriptorType(mlir::spirv::StorageClass storageClass,
