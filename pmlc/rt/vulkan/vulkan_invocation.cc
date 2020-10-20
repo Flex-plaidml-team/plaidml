@@ -98,6 +98,9 @@ void VulkanInvocation::createQueryPool() {
 void VulkanInvocation::createLaunchKernelAction(uint8_t *shader, uint32_t size,
                                                 const char *entryPoint,
                                                 NumWorkGroups numWorkGroups) {
+  if (!curr) {
+    curr = std::make_shared<LaunchKernelAction>();
+  }
   curr->binary = shader;
   curr->binarySize = size;
   curr->entryPoint = entryPoint;
