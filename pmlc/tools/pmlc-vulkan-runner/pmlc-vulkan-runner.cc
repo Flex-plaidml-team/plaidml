@@ -29,7 +29,11 @@
 
 #include "pmlc/all_dialects.h"
 #include "pmlc/compiler/program.h"
+#include "pmlc/conversion/comp_to_llvm/passes.h"
 #include "pmlc/conversion/gpu/lowering.h"
+#include "pmlc/conversion/gpu_to_comp/passes.h"
+#include "pmlc/dialect/comp/ir/types.h"
+#include "pmlc/dialect/comp/transforms/passes.h"
 #include "pmlc/rt/executable.h"
 #include "pmlc/rt/runtime_registry.h"
 #include "pmlc/util/logging.h"
@@ -38,19 +42,28 @@ using namespace mlir; // NOLINT[build/namespaces]
 using pmlc::compiler::Program;
 using pmlc::rt::Executable;
 using pmlc::util::BufferPtr;
+namespace comp = pmlc::dialect::comp;
 
 static LogicalResult runMLIRPasses(ModuleOp module) {
   PassManager passManager(module.getContext());
   applyPassManagerCLOptions(passManager);
 
   passManager.addPass(createGpuKernelOutliningPass());
+
+  // Convert GPU to comp.
+  passManager.addPass(pmlc::conversion::gpu_to_comp::createConvertGpuToCompPass(
+      comp::ExecEnvRuntime::Vulkan, /*memorySpace=*/0));
+  passManager.addPass(comp::createExecEnvCoalescingPass());
+  passManager.addPass(comp::createMinimizeAllocationsPass());
+
   passManager.addPass(createLegalizeStdOpsForSPIRVLoweringPass());
   passManager.addPass(createConvertGPUToSPIRVPass());
   OpPassManager &modulePM = passManager.nest<spirv::ModuleOp>();
   modulePM.addPass(spirv::createLowerABIAttributesPass());
   modulePM.addPass(spirv::createUpdateVersionCapabilityExtensionPass());
+  // Comp to LLVM - Vulkan function calls.
   passManager.addPass(
-      pmlc::conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass());
+      pmlc::conversion::comp_to_llvm::createConvertCompToVulkanPass());
   passManager.addPass(createLowerToLLVMPass(LowerToLLVMOptions{
       /*useBarePtrCallConv=*/false,
       /*emitCWrappers=*/true,
@@ -97,9 +110,8 @@ int JitRunnerMain(int argc, char **argv) {
   runMLIRPasses(*program->module);
 
   auto executable =
-      Executable::fromProgram(program, options.optDeviceID.getValue(),
-                              ArrayRef<BufferPtr>{}, ArrayRef<BufferPtr>{});
-  executable->invoke();
+      Executable::fromProgram(program, options.optDeviceID.getValue());
+  executable->invoke(ArrayRef<BufferPtr>{}, ArrayRef<BufferPtr>{});
 
   return EXIT_SUCCESS;
 }
@@ -126,5 +138,10 @@ int main(int argc, char **argv) {
   mlir::initializeLLVMPasses();
   pmlc::rt::initRuntimes();
 
-  return JitRunnerMain(argc, argv);
+  try {
+    return JitRunnerMain(argc, argv);
+  } catch (const std::exception &ex) {
+    llvm::errs() << "Unhandled exception caught: " << ex.what() << "\n";
+  }
+  return EXIT_FAILURE;
 }

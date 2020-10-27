@@ -7,15 +7,11 @@
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Value.h"
 
-namespace pmlc::dialect::eltwise {
+#include "pmlc/util/enums.h"
+
+namespace pmlc::dialect::tile {
 
 mlir::Type promoteTypes(mlir::Type lhs, mlir::Type rhs);
-
-llvm::SmallVector<int64_t, 4>
-getShapeFromOperands(llvm::ArrayRef<mlir::Value> operands);
-
-mlir::Type ComputeResultType(mlir::ValueRange operands,
-                             mlir::Type override = mlir::Type());
 
 mlir::RankedTensorType getRankedTensorType(mlir::Type type);
 
@@ -38,4 +34,18 @@ inline ConstantValueMatcher m_One() { return ConstantValueMatcher{1}; }
 
 mlir::Type toSignlessType(mlir::Type type);
 
-} // namespace pmlc::dialect::eltwise
+mlir::LogicalResult
+materializeOperands(mlir::OpBuilder &builder, mlir::Operation *op,
+                    llvm::ArrayRef<mlir::OpOperand *> operands);
+
+mlir::LogicalResult
+materializeOperands(mlir::OpBuilder &builder, mlir::Operation *op,
+                    llvm::MutableArrayRef<mlir::OpOperand> operands);
+
+mlir::LogicalResult materializeOperands(mlir::OpBuilder &builder,
+                                        mlir::Operation *op);
+
+mlir::Value createIdentity(mlir::OpBuilder &builder, mlir::Location loc,
+                           mlir::Type elementType, util::AggregationKind agg);
+
+} // namespace pmlc::dialect::tile

@@ -23,7 +23,6 @@ gentbl(
 plaidml_cc_library(
     name = "gpu",
     srcs = [
-        "gpu_to_vulkan.cc",
         "kernel_outlining.cc",
         "ops_to_kernel.cc",
         "pass_detail.h",

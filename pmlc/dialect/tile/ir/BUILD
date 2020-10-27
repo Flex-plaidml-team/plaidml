@@ -9,8 +9,8 @@ filegroup(
     name = "td_files",
     srcs = [
         "base.td",
+        "eltwise.td",
         "ops.td",
-        "//pmlc/dialect/eltwise/ir:td_files",
     ],
 )
 
@@ -19,25 +19,40 @@ gentbl(
     tbl_outs = [
         ("-gen-op-decls", "ops.h.inc"),
         ("-gen-op-defs", "ops.cc.inc"),
-        ("-gen-dialect-decls", "dialect.h.inc"),
+        ("-gen-dialect-decls -dialect=tile", "dialect.h.inc"),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "ops.td",
     td_srcs = [":td_files"],
 )
 
+gentbl(
+    name = "interfaces-gen",
+    tbl_outs = [
+        ("-gen-op-interface-decls", "interfaces.h.inc"),
+        ("-gen-op-interface-defs", "interfaces.cc.inc"),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "interfaces.td",
+    td_srcs = ["@llvm-project//mlir:OpBaseTdFiles"],
+)
+
 plaidml_cc_library(
     name = "ir",
     srcs = [
         "dialect.cc",
+        "eltwise.cc",
         "ops.cc",
+        "util.cc",
     ],
     hdrs = [
         "ops.h",
+        "types.h",
+        "util.h",
     ],
     deps = [
         ":gen-ops",
-        "//pmlc/dialect/eltwise/ir",
+        ":interfaces-gen",
         "//pmlc/util",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",

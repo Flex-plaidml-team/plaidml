@@ -1,12 +1,8 @@
-#ifndef __PMLC_CONVERSION_GPU_TO_VULKAN_PASSES__
-#define __PMLC_CONVERSION_GPU_TO_VULKAN_PASSES__
+// Copyright 2020, Intel Corporation
+#ifndef __PMLC_GPU_KERNEL_OUTLINING_PASS__
+#define __PMLC_GPU_KERNEL_OUTLINING_PASS__
 
 include "mlir/Pass/PassBase.td"
-
-def ConvertGpuLaunchFuncToVulkanCalls : Pass<"pmlc-convert-gpu-to-vulkan", "mlir::ModuleOp"> {
-  let summary = "Convert gpu.launch_func op to Vulkan runtime calls";
-  let constructor = "pmlc::conversion::gpu::createConvertGpuLaunchFuncToVulkanCallsPass()";
-}
 
 def GpuKernelOutliningPass : Pass<"pmlc-kernel_outlining", "mlir::ModuleOp"> {
   let summary = "Outline gpu.launch bodies to kernel functions";
@@ -17,6 +13,7 @@ def GpuKernelOutliningPass : Pass<"pmlc-kernel_outlining", "mlir::ModuleOp"> {
   ];
 }
 
+
 def HostOpsToGPUKernelPass : Pass<"pmlc-host-ops-to-kernel", "mlir::ModuleOp"> {
   let summary = "Construct new gpu.modules for operations defined between gpu.modules";
   let constructor = "pmlc::conversion::gpu::createHostOpsToGPUKernelPass()";
@@ -26,4 +23,4 @@ def HostOpsToGPUKernelPass : Pass<"pmlc-host-ops-to-kernel", "mlir::ModuleOp"> {
   ];
 }
 
-#endif // __PMLC_CONVERSION_GPU_TO_VULKAN_PASSES__
+#endif // __PMLC_GPU_KERNEL_OUTLINING_PASS__

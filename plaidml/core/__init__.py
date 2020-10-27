@@ -244,9 +244,13 @@ class TensorShape(ForeignObject):
 class Buffer(ForeignObject):
     __ffi_del__ = lib.plaidml_buffer_free
 
-    def __init__(self, shape=None, ptr=None):
+    def __init__(self, shape=None, ptr=None, data=None):
         self._ndarray = None
-        if ptr:
+        if data is not None:
+            self.__data = data
+            cdata = ffi.from_buffer(data)
+            ffi_obj = ffi_call(lib.plaidml_buffer_adopt, shape.as_ptr(), cdata, len(cdata))
+        elif ptr:
             ffi_obj = ptr
         else:
             ffi_obj = ffi_call(lib.plaidml_buffer_alloc, shape.as_ptr())
@@ -276,16 +280,14 @@ class Buffer(ForeignObject):
         return self._ndarray
 
     def copy_into_ndarray(self, dst):
-        shape = self.shape
-        src = np.frombuffer(self.data, dtype=shape.dtype.into_numpy())
-        src = src.reshape(shape.sizes)
+        src = np.frombuffer(self.data, dtype=self.shape.dtype.into_numpy())
+        src = src.reshape(self.shape.sizes)
         np.copyto(dst, src)
 
     def copy_from_ndarray(self, src):
-        shape = self.shape
-        dst = np.frombuffer(self.data, dtype=shape.dtype.into_numpy())
-        dst = dst.reshape(shape.sizes)
-        np.copyto(dst, src)
+        dst = np.frombuffer(self.data, dtype=self.shape.dtype.into_numpy())
+        dst = dst.reshape(self.shape.sizes)
+        np.copyto(dst, src, casting='unsafe')
 
 
 class Program(ForeignObject):
