@@ -1109,8 +1109,10 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
       dstOps.push_back(loop.getIVs()[i]);
     }
 
+    auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
+    auto sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);
     // Write the value to the destination
-    rewriter.create<mlir::StoreOp>(loc, srcVal, resultMemRef, dstOps);
+    rewriter.create<mlir::StoreOp>(loc, sumVal, resultMemRef, dstOps);
 
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
     rewriter.replaceOp(op, loop.getResult(0));
