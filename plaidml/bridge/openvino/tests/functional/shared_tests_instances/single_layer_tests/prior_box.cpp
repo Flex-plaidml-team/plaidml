@@ -47,10 +47,10 @@ const std::vector<std::vector<float>> variances = {
     // {0.1f, 0.2f, 0.3f, 0.4f}
 };
 const std::vector<bool> scaleAllSizes = {false, true};
-// some attributes are complict with others, use this to switch
+// The following added bool vectors are used to mask corresponding attributes.
 const std::vector<bool> useFixedSizes = {false, true};
 const std::vector<bool> useFixedRatios = {false, true};
-// combine supports max to 10 arguments
+// Combine supports up to 10 arguments
 const auto layerSpecificParams = ::testing::Combine(
     ::testing::ValuesIn(minSizes), ::testing::ValuesIn(maxSizes), ::testing::ValuesIn(aspectRatios),
     ::testing::ValuesIn(density), ::testing::ValuesIn(fixedRatios), ::testing::ValuesIn(fixedSizes),
