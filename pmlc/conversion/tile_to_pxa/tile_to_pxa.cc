@@ -1052,8 +1052,13 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     // 'dims' contains the destination indices
     // 'other' is the shape of the output
     // this is redundant because the result type also specifies output shape
+    /*
     auto updates = adaptor.tensor();
     auto indices = adaptor.dims();
+    */
+    //auto data = adaptor.data();
+    auto indices = adaptor.indices();
+    auto updates = adaptor.updates();
 
     // Make an allocation for the output
     auto resultType = typeConverter.convertType(op.result().getType());
@@ -1084,9 +1089,10 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     // Load the location value from the indices tensor.
     // Create an affine map for loading the index, using leading counters.
+    size_t axis = *(op.axis().getRawData());
     size_t idxDims = indices.getType().cast<MemRefType>().getShape().size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
-    auto idxLoadOps = loop.getIVs().take_front(idxDims);
+    auto idxLoadOps = loop.getIVs().slice(axis, idxDims);
 
     Value indexVal =
         rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
@@ -1104,10 +1110,15 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     // destination affine map.
     size_t dstDims = resultMemRefType.getShape().size();
     SmallVector<Value, 4> dstOps;
-    dstOps.push_back(indexVal);
-    for (size_t i = 1; i < dstDims; ++i) {
+    for (size_t i = 0; i < axis; ++i) {
       dstOps.push_back(loop.getIVs()[i]);
     }
+
+    for (size_t i = axis + idxDims - 1; i < dstDims; ++i) {
+      dstOps.push_back(loop.getIVs()[i]);
+    }
+
+    dstOps[axis] = indexVal;
 
     auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
     auto sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);

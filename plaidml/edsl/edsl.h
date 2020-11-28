@@ -905,7 +905,28 @@ inline Tensor round(const Tensor& x) { return intrinsic("round", x); }
 /// \param z Tensor
 /// \return Tensor
 ///
-inline Tensor scatter(const Tensor& x, const Tensor& y, const Tensor& z) { return intrinsic("scatter", x, y, z); }
+class scatter {
+public:
+  explicit scatter(const Tensor& x, const Tensor& y, const Tensor& z) : x_(x), y_(y), z_(z) {}
+
+  scatter& axis(int axis) {
+    axis_ = Tensor(axis);
+    return *this;
+  }
+
+  Tensor build() const {
+    std::vector<Tensor> args = {x_, y_, z_, axis_};
+    return intrinsicCall("scatter", args);
+  }
+
+  operator Tensor() { return build(); }
+
+private:
+  Tensor x_;
+  Tensor y_;
+  Tensor z_;
+  Tensor axis_ = Tensor(0);
+};
 
 ///
 /// Performs an elementwise conditional which returns the corresponding

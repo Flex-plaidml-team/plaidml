@@ -747,9 +747,16 @@ struct ProgramBuilder {
 
   Value makeScatterOp(ExprNodeIntrinsic *node, ArrayRef<Value> operands) {
     TensorShape shape = evaluator.getShape(node);
+    IntegerAttr axis;
+
+    if (!matchPattern(operands[3], m_Constant(&axis))) {
+      throw std::runtime_error("'scatter' primitive expects the 'axis' argument "
+			       "to be a constant integer");
+    }
     RankedTensorType resultType = builder.getRankedTensorType(shape);
     auto op = builder.create<tile::ScatterOp>(loc, resultType,
-                                              operands.take_front(2));
+                                              operands.take_front(3),
+					      builder.getIndexAttr(axis.getInt()));
     return op.result();
   }
 

@@ -122,11 +122,12 @@ struct ReshapeOp : Intrinsic {
 struct ScatterOp : Intrinsic {
   TensorShapes getShapes(Evaluator *evaluator, ArrayRef<ExprNodePtr> operands,
                          ArrayRef<TensorShape> shapes) const final {
-    if (operands.size() != 3) {
-      throw std::runtime_error("'scatter' requires 3 operands.");
+    if (operands.size() != 4) {
+      throw std::runtime_error("'scatter' requires 4 operands.");
     }
-    // source tensor
-    if (shapes[0].sizes.empty()) {
+    // data tensor
+    int64_t rank = shapes[0].getRank();
+    if (!rank) {
       throw std::runtime_error(
           "'scatter' requires operand #1 to have at least one dimension.");
     }
@@ -137,12 +138,15 @@ struct ScatterOp : Intrinsic {
       throw std::runtime_error(
           "'scatter' requires operand #2 to be an integer.");
     }
-    // shape tensor
-    TensorShape ret(shapes[0].elementType);
-    ret.sizes.push_back(shapes[2].sizes[0]);
-    for (size_t i = shapes[1].getRank(); i < shapes[0].getRank(); i++) {
-      ret.sizes.push_back(shapes[0].sizes[i]);
+
+    auto axis = getIntegerValue(evaluator, operands[3]);
+    if (!axis || axis.getValue() >= rank || axis.getValue() < 0) {
+      throw std::runtime_error(
+          "'gather' primitive expects the 'axis' argument "
+	  "to be a positive integer that is less than the updates tensor rank.");
     }
+
+    TensorShape ret(shapes[0].elementType, shapes[0].sizes);
     return {ret};
   }
 };

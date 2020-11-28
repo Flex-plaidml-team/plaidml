@@ -166,11 +166,21 @@ def ReshapeOp : MaterializeOp<"reshape">,
 def ScatterOp : MaterializeOp<"scatter"> {
   let summary = "special scatter operation";
   let arguments = (ins
-    RankedTensorOf<[AnyScalar]>:$tensor,
-    RankedTensorOf<[AnyInteger]>:$dims);
+    RankedTensorOf<[AnyScalar]>:$data,
+    RankedTensorOf<[AnyScalar]>:$indices,
+    RankedTensorOf<[AnyScalar]>:$updates,
+    DefaultValuedAttr<IndexAttr, "0">:$axis);
   let results = (outs RankedTensorOf<[AnyScalar]>:$result);
+  let builders = [OpBuilder<
+    "mlir::OpBuilder &builder, "
+    "mlir::OperationState& result, "
+    "mlir::Type resultType, "
+    "mlir::ValueRange operands, "
+    "mlir::IntegerAttr axis"
+  >];
+
   let assemblyFormat = [{
-    $tensor $dims attr-dict `:` functional-type(operands, $result)
+    $data $indices $updates attr-dict `:` functional-type(operands, $result)
   }];
 }
 

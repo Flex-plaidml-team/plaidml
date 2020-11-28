@@ -386,6 +386,14 @@ LogicalResult verifyContractionOp(ContractionOp op) {
   return success();
 }
 
+void ScatterOp::build(OpBuilder &builder, OperationState &result,
+		      Type resultType, ValueRange operands, IntegerAttr axis) {
+  assert(operands.size() == 3u && "mismatched number of parameters");
+  result.addOperands(operands);
+  result.addAttribute("axis", axis);
+  result.addTypes(resultType);
+}
+
 } // namespace pmlc::dialect::tile
 
 #define GET_OP_CLASSES
