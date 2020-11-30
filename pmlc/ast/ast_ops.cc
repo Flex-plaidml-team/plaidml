@@ -122,8 +122,8 @@ struct ReshapeOp : Intrinsic {
 struct ScatterOp : Intrinsic {
   TensorShapes getShapes(Evaluator *evaluator, ArrayRef<ExprNodePtr> operands,
                          ArrayRef<TensorShape> shapes) const final {
-    if (operands.size() != 4) {
-      throw std::runtime_error("'scatter' requires 4 operands.");
+    if (operands.size() != 5) {
+      throw std::runtime_error("'scatter' requires 5 operands.");
     }
     // data tensor
     int64_t rank = shapes[0].getRank();
@@ -144,6 +144,13 @@ struct ScatterOp : Intrinsic {
       throw std::runtime_error(
           "'gather' primitive expects the 'axis' argument "
 	  "to be a positive integer that is less than the updates tensor rank.");
+    }
+
+    auto updateMode = getIntegerValue(evaluator, operands[4]);
+    if (!updateMode) {
+      throw std::runtime_error(
+          "'gather' primitive expects the 'updateMode' argument "
+	  "to be a constant integer.");
     }
 
     TensorShape ret(shapes[0].elementType, shapes[0].sizes);

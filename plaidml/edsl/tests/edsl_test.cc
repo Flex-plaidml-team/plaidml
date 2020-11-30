@@ -1451,7 +1451,7 @@ TEST_F(CppEdsl, Scatter1D) {
   auto D = Placeholder(DType::FLOAT32, {8});
   auto I = Placeholder(DType::INT32, {4});
   auto U = Placeholder(DType::FLOAT32, {4});
-  auto O = scatter(D, I, U).axis(0);
+  auto O = scatter(D, I, U).axis(0).update(ScatterUpdateMode::SUM);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
   std::vector<int32_t> indices = {4, 3, 1, 7};
@@ -1465,7 +1465,7 @@ TEST_F(CppEdsl, Scatter2D) {
   auto D = Placeholder(DType::FLOAT32, {4, 8});
   auto I = Placeholder(DType::INT32, {4});
   auto U = Placeholder(DType::FLOAT32, {4, 4});
-  auto O = scatter(D, I, U).axis(1);
+  auto O = scatter(D, I, U).axis(1).update(ScatterUpdateMode::SLICE);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
   std::vector<int32_t> indices = {0, 2, 4, 6};
@@ -1475,12 +1475,17 @@ TEST_F(CppEdsl, Scatter2D) {
       6, 6, 6, 6,
       7, 7, 7, 7
   };
-  std::vector<int32_t> data = {4, 8};
+  std::vector<float> data = {
+      4, 1, 4, 5, 4, 9, 4, 0,
+      4, 2, 4, 4, 4, 0, 4, 7,
+      4, 3, 4, 0, 4, 8, 4, 0,
+      4, 4, 4, 3, 4, 0, 4, 0,
+  };
   std::vector<float> expected = {
-      4, 0, 4, 0, 4, 0, 4, 0,
-      5, 0, 5, 0, 5, 0, 5, 0,
-      6, 0, 6, 0, 6, 0, 6, 0,
-      7, 0, 7, 0, 7, 0, 7, 0
+      4, 1, 4, 5, 4, 9, 4, 0,
+      5, 2, 5, 4, 5, 0, 5, 7,
+      6, 3, 6, 0, 6, 8, 6, 0,
+      7, 4, 7, 3, 7, 0, 7, 0
   };
   checkExact(program, {data, indices, updates}, {expected});
 }

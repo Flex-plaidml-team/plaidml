@@ -33,6 +33,7 @@ using namespace mlir; // NOLINT
 
 using util::AggregationKind;
 using util::CombinationKind;
+using util::ScatterUpdateMode;
 
 namespace {
 
@@ -1056,7 +1057,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     auto updates = adaptor.tensor();
     auto indices = adaptor.dims();
     */
-    //auto data = adaptor.data();
+    auto data = adaptor.data();
     auto indices = adaptor.indices();
     auto updates = adaptor.updates();
 
@@ -1120,12 +1121,39 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     dstOps[axis] = indexVal;
 
+    if (op.updateMode() == ScatterUpdateMode::slice) {
+      auto elementType = data.getType().cast<MemRefType>().getElementType();
+      auto zeroVal = rewriter.create<mlir::ConstantOp>(
+          loc, elementType, rewriter.getFloatAttr(elementType, 0.0));
+
+      rewriter.create<mlir::StoreOp>(loc, zeroVal, data, dstOps);
+    }
     auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
     auto sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);
     // Write the value to the destination
     rewriter.create<mlir::StoreOp>(loc, sumVal, resultMemRef, dstOps);
 
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
+
+    if (op.updateMode() == ScatterUpdateMode::slice) {
+      rewriter.setInsertionPointAfter(loop);
+      auto dataShape = data.getType().cast<MemRefType>().getShape();
+      auto assignOp = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{data.getType()},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, dataShape);
+      rewriter.setInsertionPointToStart(assignOp.getBody());
+      size_t dataDims = dataShape.size();
+      auto dataLoadMap = AffineMap::getMultiDimIdentityMap(dataDims, ctx);
+      auto loadData = rewriter.create<pxa::PxaLoadOp>(loc, data, dataLoadMap,
+                                                      assignOp.getIVs());
+      auto stored = rewriter.create<pxa::PxaReduceOp>(
+          loc, AtomicRMWKind::addf, loadData, resultMemRef, dataLoadMap,
+          assignOp.getIVs());
+      rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{stored});
+      rewriter.replaceOp(op, assignOp.getResult(0));
+      return success();
+    }
+
     rewriter.replaceOp(op, loop.getResult(0));
     return success();
   }

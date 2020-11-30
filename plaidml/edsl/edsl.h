@@ -897,6 +897,12 @@ inline Tensor reshape(const Tensor& x, const std::vector<TensorDim>& dims) {
 ///
 inline Tensor round(const Tensor& x) { return intrinsic("round", x); }
 
+enum class ScatterUpdateMode : uint64_t {
+  SUM,
+  SLICE,
+  ELET
+};
+
 ///
 /// Takes an input tensor (`x`), a set of indices to scatter over (`y`), and the number of elements in the scattered
 /// tensor (`z`), and returns an output tensor that scatters the input tensor across the number of elements specified.
@@ -914,8 +920,13 @@ public:
     return *this;
   }
 
+  scatter& update(ScatterUpdateMode mode) {
+    update_mode_ = Tensor(static_cast<uint64_t>(mode));
+    return *this;
+  }
+
   Tensor build() const {
-    std::vector<Tensor> args = {x_, y_, z_, axis_};
+    std::vector<Tensor> args = {x_, y_, z_, axis_, update_mode_};
     return intrinsicCall("scatter", args);
   }
 
@@ -926,6 +937,7 @@ private:
   Tensor y_;
   Tensor z_;
   Tensor axis_ = Tensor(0);
+  Tensor update_mode_ = Tensor(static_cast<uint64_t>(ScatterUpdateMode::SUM));
 };
 
 ///

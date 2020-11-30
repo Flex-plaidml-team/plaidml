@@ -62,4 +62,17 @@ def DataType : I64EnumAttr<
   let convertFromStorage = "static_cast<" # returnType # ">($_self.getValue().getZExtValue())";
 }
 
+def ScatterUpdateMode : I64EnumAttr<
+    "ScatterUpdateMode",
+    "Scatter update mode",
+    [
+      I64EnumAttrCase<"sum", 0>,
+      I64EnumAttrCase<"slice", 1>,
+      I64EnumAttrCase<"elet", 2>,
+    ]> {
+  let cppNamespace = "pmlc::util";
+  let returnType = "ScatterUpdateMode";
+  let convertFromStorage = "static_cast<" # returnType # ">($_self.getValue().getZExtValue())";
+}
+
 #endif // __PML_UTIL_ENUMS__

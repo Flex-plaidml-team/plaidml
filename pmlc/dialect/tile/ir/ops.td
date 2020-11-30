@@ -169,14 +169,17 @@ def ScatterOp : MaterializeOp<"scatter"> {
     RankedTensorOf<[AnyScalar]>:$data,
     RankedTensorOf<[AnyScalar]>:$indices,
     RankedTensorOf<[AnyScalar]>:$updates,
-    DefaultValuedAttr<IndexAttr, "0">:$axis);
+    DefaultValuedAttr<IndexAttr, "0">:$axis,
+    DefaultValuedAttr<ScatterUpdateMode, "ScatterUpdateMode::sum">:$updateMode
+  );
   let results = (outs RankedTensorOf<[AnyScalar]>:$result);
   let builders = [OpBuilder<
     "mlir::OpBuilder &builder, "
     "mlir::OperationState& result, "
     "mlir::Type resultType, "
     "mlir::ValueRange operands, "
-    "mlir::IntegerAttr axis"
+    "mlir::IntegerAttr axis, "
+    "mlir::IntegerAttr updateMode"
   >];
 
   let assemblyFormat = [{
