@@ -1093,7 +1093,12 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     size_t axis = *(op.axis().getRawData());
     size_t idxDims = indices.getType().cast<MemRefType>().getShape().size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
-    auto idxLoadOps = loop.getIVs().slice(axis, idxDims);
+    mlir::ValueRange idxLoadOps;
+    if (op.updateMode() == ScatterUpdateMode::elet) {
+      idxLoadOps = loop.getIVs();
+    } else {
+      idxLoadOps = loop.getIVs().slice(axis, idxDims);
+    }
 
     Value indexVal =
         rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
@@ -1111,17 +1116,13 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     // destination affine map.
     size_t dstDims = resultMemRefType.getShape().size();
     SmallVector<Value, 4> dstOps;
-    for (size_t i = 0; i < axis; ++i) {
-      dstOps.push_back(loop.getIVs()[i]);
-    }
-
-    for (size_t i = axis + idxDims - 1; i < dstDims; ++i) {
+    for (size_t i = 0; i < dstDims; ++i) {
       dstOps.push_back(loop.getIVs()[i]);
     }
 
     dstOps[axis] = indexVal;
 
-    if (op.updateMode() == ScatterUpdateMode::slice) {
+    if (op.updateMode() != ScatterUpdateMode::sum) {
       auto elementType = data.getType().cast<MemRefType>().getElementType();
       auto zeroVal = rewriter.create<mlir::ConstantOp>(
           loc, elementType, rewriter.getFloatAttr(elementType, 0.0));
@@ -1135,7 +1136,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
 
-    if (op.updateMode() == ScatterUpdateMode::slice) {
+    if (op.updateMode() != ScatterUpdateMode::sum) {
       rewriter.setInsertionPointAfter(loop);
       auto dataShape = data.getType().cast<MemRefType>().getShape();
       auto assignOp = rewriter.create<AffineParallelOp>(

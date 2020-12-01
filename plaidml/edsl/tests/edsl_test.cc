@@ -1490,6 +1490,36 @@ TEST_F(CppEdsl, Scatter2D) {
   checkExact(program, {data, indices, updates}, {expected});
 }
 
+TEST_F(CppEdsl, ScatterElet) {
+  auto D = Placeholder(DType::FLOAT32, {4, 4});
+  auto I = Placeholder(DType::INT32, {2, 2});
+  auto U = Placeholder(DType::FLOAT32, {2, 2});
+  auto O = scatter(D, I, U).axis(1).update(ScatterUpdateMode::ELET);
+  auto program = makeProgram("scatter", {D, I, U}, {O});
+
+  std::vector<int32_t> indices = {
+      2, 0,
+      3, 1
+  };
+  std::vector<float> updates = {
+      9, 9,
+      9, 9
+  };
+  std::vector<float> data = {
+      4, 1, 4, 5,
+      4, 2, 4, 4,
+      4, 3, 4, 0,
+      4, 4, 4, 3,
+  };
+  std::vector<float> expected = {
+      9, 1, 9, 5,
+      4, 9, 4, 9,
+      4, 3, 4, 0,
+      4, 4, 4, 3,
+  };
+  checkExact(program, {data, indices, updates}, {expected});
+}
+
 TEST_F(CppEdsl, Scatter3D) {
   auto D = Placeholder(DType::FLOAT32, {2, 8, 4});
   auto I = Placeholder(DType::INT32, {4});
