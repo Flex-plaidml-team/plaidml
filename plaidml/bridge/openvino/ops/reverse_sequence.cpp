@@ -27,14 +27,8 @@ edsl::Tensor reverse_tensor(edsl::Tensor reverse_crop, int64_t seq_axis) {
   std::vector<edsl::TensorDim> dims(reverse_crop.rank());
   reverse_crop.bind_dims(dims);
   std::vector<edsl::TensorIndex> I_idxs(reverse_crop.rank());
-  std::vector<edsl::TensorIndex> O_idxs;
-  for (int64_t axis = 0; axis < reverse_crop.rank(); axis++) {
-    if (axis == seq_axis) {
-      O_idxs.push_back(dims[axis] - 1 - I_idxs[axis]);
-    } else {
-      O_idxs.push_back(I_idxs[axis]);
-    }
-  }
+  std::vector<edsl::TensorIndex> O_idxs = I_idxs;
+  O_idxs[seq_axis] = dims[seq_axis] - 1 - I_idxs[seq_axis];
   return edsl::Contraction().outShape(dims).outAccess(O_idxs).assign(reverse_crop(I_idxs));
 }
 
