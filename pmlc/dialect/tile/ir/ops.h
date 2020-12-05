@@ -25,6 +25,7 @@ using util::AggregationKind;
 using util::CombinationKind;
 using util::InterpolationMode;
 using util::NearestMode;
+using util::ScatterUpdateMode;
 
 } // namespace pmlc::dialect::tile
 

@@ -35,6 +35,7 @@ using util::AggregationKind;
 using util::CombinationKind;
 using util::InterpolationMode;
 using util::NearestMode;
+using util::ScatterUpdateMode;
 
 namespace {
 
@@ -1326,8 +1327,9 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     // 'dims' contains the destination indices
     // 'other' is the shape of the output
     // this is redundant because the result type also specifies output shape
-    auto updates = adaptor.tensor();
-    auto indices = adaptor.dims();
+    auto data = adaptor.data();
+    auto indices = adaptor.indices();
+    auto updates = adaptor.updates();
 
     // Make an allocation for the output
     auto resultType = typeConverter.convertType(op.result().getType());
@@ -1358,9 +1360,24 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     // Load the location value from the indices tensor.
     // Create an affine map for loading the index, using leading counters.
+    int axis = *(op.axis().getRawData());
+    size_t dstDims = resultMemRefType.getShape().size();
+    // TODO: Deal with negative axis earlier in ast?
+    if (axis < 0) {
+      axis = dstDims + axis;
+    }
+
     size_t idxDims = indices.getType().cast<MemRefType>().getShape().size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
-    auto idxLoadOps = loop.getIVs().take_front(idxDims);
+    mlir::ValueRange idxLoadOps;
+    size_t idxStart;
+    if (op.updateMode() == ScatterUpdateMode::slice) {
+      idxLoadOps = loop.getIVs().slice(axis, idxDims);
+      idxStart = axis + idxDims - 1;
+    } else {
+      idxLoadOps = loop.getIVs().take_front(idxDims);
+      idxStart = axis;
+    }
 
     Value indexVal =
         rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
@@ -1376,17 +1393,50 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     // Combine the index value with the loop dimension indexes to create the
     // destination affine map.
-    size_t dstDims = resultMemRefType.getShape().size();
     SmallVector<Value, 4> dstOps;
-    dstOps.push_back(indexVal);
-    for (size_t i = 1; i < dstDims; ++i) {
+    for (int i = 0; i < axis; ++i) {
       dstOps.push_back(loop.getIVs()[i]);
     }
 
+    for (size_t i = idxStart; i < srcDims; ++i) {
+      dstOps.push_back(loop.getIVs()[i]);
+    }
+
+    dstOps[axis] = indexVal;
+
+    if (op.updateMode() != ScatterUpdateMode::none) {
+      auto elementType = data.getType().cast<MemRefType>().getElementType();
+      auto zeroVal = rewriter.create<mlir::ConstantOp>(
+          loc, elementType, rewriter.getFloatAttr(elementType, 0.0));
+
+      rewriter.create<mlir::StoreOp>(loc, zeroVal, data, dstOps);
+    }
+    auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
+    auto sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);
     // Write the value to the destination
-    rewriter.create<mlir::StoreOp>(loc, srcVal, resultMemRef, dstOps);
+    rewriter.create<mlir::StoreOp>(loc, sumVal, resultMemRef, dstOps);
 
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
+
+    if (op.updateMode() != ScatterUpdateMode::none) {
+      rewriter.setInsertionPointAfter(loop);
+      auto dataShape = data.getType().cast<MemRefType>().getShape();
+      auto assignOp = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{data.getType()},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, dataShape);
+      rewriter.setInsertionPointToStart(assignOp.getBody());
+      size_t dataDims = dataShape.size();
+      auto dataLoadMap = AffineMap::getMultiDimIdentityMap(dataDims, ctx);
+      auto loadData = rewriter.create<pxa::PxaLoadOp>(loc, data, dataLoadMap,
+                                                      assignOp.getIVs());
+      auto stored = rewriter.create<pxa::PxaReduceOp>(
+          loc, AtomicRMWKind::addf, loadData, resultMemRef, dataLoadMap,
+          assignOp.getIVs());
+      rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{stored});
+      rewriter.replaceOp(op, assignOp.getResult(0));
+      return success();
+    }
+
     rewriter.replaceOp(op, loop.getResult(0));
     return success();
   }

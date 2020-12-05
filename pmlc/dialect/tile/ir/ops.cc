@@ -331,6 +331,16 @@ void GatherOp::build(OpBuilder &builder, OperationState &result,
   result.addTypes(resultType);
 }
 
+void ScatterOp::build(OpBuilder &builder, OperationState &result,
+                      Type resultType, ValueRange operands, IntegerAttr axis,
+                      IntegerAttr updateMode) {
+  assert(operands.size() == 3u && "mismatched number of parameters");
+  result.addOperands(operands);
+  result.addAttribute("axis", axis);
+  result.addAttribute("updateMode", updateMode);
+  result.addTypes(resultType);
+}
+
 } // namespace pmlc::dialect::tile
 
 #define GET_OP_CLASSES
