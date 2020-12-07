@@ -97,6 +97,7 @@ def ScatterUpdateMode : I64EnumAttr<
       I64EnumAttrCase<"none", 0>,
       I64EnumAttrCase<"slice", 1>,
       I64EnumAttrCase<"elt", 2>,
+      I64EnumAttrCase<"nd", 3>,
     ]> {
   let cppNamespace = "pmlc::util";
   let returnType = "ScatterUpdateMode";

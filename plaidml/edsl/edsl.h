@@ -1001,7 +1001,7 @@ inline Tensor round(const Tensor& x) { return intrinsic("round", x); }
 /// \return Tensor
 ///
 
-enum class ScatterUpdateMode : uint64_t { NONE, SLICE, ELT };
+enum class ScatterUpdateMode : uint64_t { NONE, SLICE, ELT, ND };
 
 class scatter {
  public:

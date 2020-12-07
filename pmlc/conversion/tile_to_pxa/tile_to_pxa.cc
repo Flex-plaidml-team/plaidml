@@ -1367,42 +1367,70 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
       axis = dstDims + axis;
     }
 
-    size_t idxDims = indices.getType().cast<MemRefType>().getShape().size();
+    auto idxShape = indices.getType().cast<MemRefType>().getShape();
+    size_t idxDims = idxShape.size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
-    mlir::ValueRange idxLoadOps;
-    size_t idxStart;
-    if (op.updateMode() == ScatterUpdateMode::slice) {
-      idxLoadOps = loop.getIVs().slice(axis, idxDims);
-      idxStart = axis + idxDims - 1;
-    } else {
-      idxLoadOps = loop.getIVs().take_front(idxDims);
-      idxStart = axis;
-    }
-
-    Value indexVal =
-        rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
-            .getResult();
-
-    // Cast the index value from its integer type to the index type
-    if (!indexVal.getType().isa<IndexType>()) {
-      // cast from whatever integer type it has to index type
-      auto indexType = rewriter.getIndexType();
-      indexVal = rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
-                     .getResult();
-    }
-
-    // Combine the index value with the loop dimension indexes to create the
-    // destination affine map.
     SmallVector<Value, 4> dstOps;
-    for (int i = 0; i < axis; ++i) {
-      dstOps.push_back(loop.getIVs()[i]);
-    }
+    // TODO: Move this code block into separate functions?
+    if (op.updateMode() != ScatterUpdateMode::nd) {
+      mlir::ValueRange idxLoadOps;
+      size_t idxStart;
+      if (op.updateMode() == ScatterUpdateMode::slice) {
+        idxLoadOps = loop.getIVs().slice(axis, idxDims);
+        idxStart = axis + idxDims - 1;
+      } else {
+        idxLoadOps = loop.getIVs().take_front(idxDims);
+        idxStart = axis;
+      }
 
-    for (size_t i = idxStart; i < srcDims; ++i) {
-      dstOps.push_back(loop.getIVs()[i]);
-    }
+      Value indexVal =
+          rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
+              .getResult();
 
-    dstOps[axis] = indexVal;
+      // Cast the index value from its integer type to the index type
+      if (!indexVal.getType().isa<IndexType>()) {
+        // cast from whatever integer type it has to index type
+        auto indexType = rewriter.getIndexType();
+        indexVal = rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
+                       .getResult();
+      }
+
+      // Combine the index value with the loop dimension indexes to create the
+      // destination affine map.
+      for (int i = 0; i < axis; ++i) {
+        dstOps.push_back(loop.getIVs()[i]);
+      }
+
+      for (size_t i = idxStart; i < srcDims; ++i) {
+        dstOps.push_back(loop.getIVs()[i]);
+      }
+
+      dstOps[axis] = indexVal;
+    } else {
+      std::vector<Value> idxs, combIdx(idxDims);
+      for (size_t i = 0; i < idxDims - 1; ++i) {
+        combIdx[i] = loop.getIVs()[i];
+      }
+      for (int64_t i = 0; i < idxShape[idxDims - 1]; ++i) {
+        combIdx[idxDims - 1] = rewriter.create<mlir::ConstantIndexOp>(loc, i);
+        Value indexVal =
+            rewriter.create<pxa::PxaLoadOp>(loc, indices, combIdx).getResult();
+
+        // Cast the index value from its integer type to the index type
+        if (!indexVal.getType().isa<IndexType>()) {
+          // cast from whatever integer type it has to index type
+          auto indexType = rewriter.getIndexType();
+          indexVal =
+              rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
+                  .getResult();
+        }
+        idxs.push_back(indexVal);
+      }
+      dstOps.insert(dstOps.begin(), idxs.begin(), idxs.end());
+      for (size_t i = idxDims - 1; i < srcDims; ++i) {
+        dstOps.push_back(loop.getIVs()[i]);
+      }
+    }
 
     if (op.updateMode() != ScatterUpdateMode::none) {
       auto elementType = data.getType().cast<MemRefType>().getElementType();
