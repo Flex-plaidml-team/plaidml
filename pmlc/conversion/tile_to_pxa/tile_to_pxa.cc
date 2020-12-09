@@ -1337,6 +1337,23 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     auto resultMemRef =
         rewriter.create<AllocOp>(loc, resultMemRefType).getResult();
 
+    if (op.updateMode() != ScatterUpdateMode::none) {
+      auto dataShape = data.getType().cast<MemRefType>().getShape();
+      auto copyLoop = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{data.getType()},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, dataShape);
+      rewriter.setInsertionPointToStart(copyLoop.getBody());
+      size_t dataDims = dataShape.size();
+      auto dataLoadMap = AffineMap::getMultiDimIdentityMap(dataDims, ctx);
+      auto loadData = rewriter.create<pxa::PxaLoadOp>(loc, data, dataLoadMap,
+                                                      copyLoop.getIVs());
+      auto stored = buildSimpleStore(rewriter, loc, loadData, resultMemRef,
+                                     tile::getPaddingInfo(op));
+
+      rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{stored});
+      rewriter.setInsertionPointAfter(copyLoop);
+    }
+
     // Get the shape of the update tensor and create a parallel loop over its
     // indexes; we will load each value from the updates, load its destination
     // from the indexes, and store the value to the result.
@@ -1361,14 +1378,36 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     // Load the location value from the indices tensor.
     // Create an affine map for loading the index, using leading counters.
     size_t axis = *(op.axis().getRawData());
-    size_t dstDims = resultMemRefType.getShape().size();
-
     auto idxShape = indices.getType().cast<MemRefType>().getShape();
     size_t idxDims = idxShape.size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
     SmallVector<Value, 4> dstOps;
     // TODO: Move this code block into separate functions?
-    if (op.updateMode() != ScatterUpdateMode::nd) {
+    if (op.updateMode() == ScatterUpdateMode::nd) {
+      std::vector<Value> idxs, combIdx(idxDims);
+      for (size_t i = 0; i < idxDims - 1; ++i) {
+        combIdx[i] = loop.getIVs()[i];
+      }
+      for (int64_t i = 0; i < idxShape[idxDims - 1]; ++i) {
+        combIdx[idxDims - 1] = rewriter.create<mlir::ConstantIndexOp>(loc, i);
+        Value indexVal =
+            rewriter.create<pxa::PxaLoadOp>(loc, indices, combIdx).getResult();
+
+        // Cast the index value from its integer type to the index type
+        if (!indexVal.getType().isa<IndexType>()) {
+          // cast from whatever integer type it has to index type
+          auto indexType = rewriter.getIndexType();
+          indexVal =
+              rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
+                  .getResult();
+        }
+        idxs.push_back(indexVal);
+      }
+      dstOps.insert(dstOps.begin(), idxs.begin(), idxs.end());
+      for (size_t i = idxDims - 1; i < srcDims; ++i) {
+        dstOps.push_back(loop.getIVs()[i]);
+      }
+    } else {
       mlir::ValueRange idxLoadOps;
       size_t idxStart;
       if (op.updateMode() == ScatterUpdateMode::slice) {
@@ -1393,7 +1432,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
       // Combine the index value with the loop dimension indexes to create the
       // destination affine map.
-      for (int i = 0; i < axis; ++i) {
+      for (size_t i = 0; i < axis; ++i) {
         dstOps.push_back(loop.getIVs()[i]);
       }
 
@@ -1402,65 +1441,26 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
       }
 
       dstOps[axis] = indexVal;
+    }
+
+    if (op.updateMode() == ScatterUpdateMode::none) {
+      auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
+      Value sumVal;
+      if (srcVal.getType().isa<FloatType>()) {
+        sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);
+      } else if (resultType.isa<IntegerType>()) {
+        sumVal = rewriter.create<mlir::AddIOp>(loc, srcVal, loadVal);
+      } else {
+        llvm_unreachable("Unsupported datatype in scatter.");
+      }
+      // Write the summed value to the destination
+      rewriter.create<mlir::StoreOp>(loc, sumVal, resultMemRef, dstOps);
     } else {
-      std::vector<Value> idxs, combIdx(idxDims);
-      for (size_t i = 0; i < idxDims - 1; ++i) {
-        combIdx[i] = loop.getIVs()[i];
-      }
-      for (int64_t i = 0; i < idxShape[idxDims - 1]; ++i) {
-        combIdx[idxDims - 1] = rewriter.create<mlir::ConstantIndexOp>(loc, i);
-        Value indexVal =
-            rewriter.create<pxa::PxaLoadOp>(loc, indices, combIdx).getResult();
-
-        // Cast the index value from its integer type to the index type
-        if (!indexVal.getType().isa<IndexType>()) {
-          // cast from whatever integer type it has to index type
-          auto indexType = rewriter.getIndexType();
-          indexVal =
-              rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
-                  .getResult();
-        }
-        idxs.push_back(indexVal);
-      }
-      dstOps.insert(dstOps.begin(), idxs.begin(), idxs.end());
-      for (size_t i = idxDims - 1; i < srcDims; ++i) {
-        dstOps.push_back(loop.getIVs()[i]);
-      }
+      // Write the updates value to the destination
+      rewriter.create<mlir::StoreOp>(loc, srcVal, resultMemRef, dstOps);
     }
-
-    if (op.updateMode() != ScatterUpdateMode::none) {
-      auto elementType = data.getType().cast<MemRefType>().getElementType();
-      auto zeroVal = rewriter.create<mlir::ConstantOp>(
-          loc, elementType, rewriter.getFloatAttr(elementType, 0.0));
-
-      rewriter.create<mlir::StoreOp>(loc, zeroVal, data, dstOps);
-    }
-    auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
-    auto sumVal = rewriter.create<mlir::AddFOp>(loc, srcVal, loadVal);
-    // Write the value to the destination
-    rewriter.create<mlir::StoreOp>(loc, sumVal, resultMemRef, dstOps);
 
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
-
-    if (op.updateMode() != ScatterUpdateMode::none) {
-      rewriter.setInsertionPointAfter(loop);
-      auto dataShape = data.getType().cast<MemRefType>().getShape();
-      auto assignOp = rewriter.create<AffineParallelOp>(
-          loc, ArrayRef<Type>{data.getType()},
-          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, dataShape);
-      rewriter.setInsertionPointToStart(assignOp.getBody());
-      size_t dataDims = dataShape.size();
-      auto dataLoadMap = AffineMap::getMultiDimIdentityMap(dataDims, ctx);
-      auto loadData = rewriter.create<pxa::PxaLoadOp>(loc, data, dataLoadMap,
-                                                      assignOp.getIVs());
-      auto stored = rewriter.create<pxa::PxaReduceOp>(
-          loc, AtomicRMWKind::addf, loadData, resultMemRef, dataLoadMap,
-          assignOp.getIVs());
-      rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{stored});
-      rewriter.replaceOp(op, assignOp.getResult(0));
-      return success();
-    }
-
     rewriter.replaceOp(op, loop.getResult(0));
     return success();
   }

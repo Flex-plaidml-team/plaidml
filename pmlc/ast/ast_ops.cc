@@ -184,7 +184,6 @@ struct ScatterOp : Intrinsic {
     }
 
     auto axis = getIntegerValue(evaluator, operands[3]);
-    // if (!axis || axis.getValue() >= rank || axis.getValue() < 0) {
     if (!axis || axis.getValue() >= rank) {
       throw std::runtime_error(
           "'scatter' primitive expects the 'axis' argument "
