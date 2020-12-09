@@ -1007,7 +1007,10 @@ class scatter {
  public:
   explicit scatter(const Tensor& x, const Tensor& y, const Tensor& z) : x_(x), y_(y), z_(z) {}
 
-  scatter& axis(int axis) {
+  scatter& axis(int64_t axis) {
+    if (axis < 0) {
+      axis += x_.rank();
+    }
     axis_ = Tensor(axis);
     return *this;
   }

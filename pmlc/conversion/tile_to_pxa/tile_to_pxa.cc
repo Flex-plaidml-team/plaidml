@@ -1360,12 +1360,8 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
 
     // Load the location value from the indices tensor.
     // Create an affine map for loading the index, using leading counters.
-    int axis = *(op.axis().getRawData());
+    size_t axis = *(op.axis().getRawData());
     size_t dstDims = resultMemRefType.getShape().size();
-    // TODO: Deal with negative axis earlier in ast?
-    if (axis < 0) {
-      axis = dstDims + axis;
-    }
 
     auto idxShape = indices.getType().cast<MemRefType>().getShape();
     size_t idxDims = idxShape.size();
