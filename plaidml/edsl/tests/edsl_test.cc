@@ -1665,8 +1665,7 @@ TEST_F(CppEdsl, Scatter1D) {
   auto O = scatter(D, I, U);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
-  // Don't bother initialize 'data' while not updating.
-  // Only the shape of data is needed.
+  // Don't bother initializing 'data' in default mode. Only shape of the data is needed.
   std::vector<float> data;
   std::vector<int32_t> indices = {4, 3, 1, 7};
   std::vector<float> updates = {9, 10, 11, 12};
@@ -1681,8 +1680,7 @@ TEST_F(CppEdsl, Scatter3D) {
   auto O = scatter(D, I, U);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
-  // Don't bother initialize 'data' while not updating.
-  // Only the shape of data is needed.
+  // Don't bother initializing 'data' in default mode. Only shape of the data is needed.
   std::vector<float> data;
   std::vector<int32_t> indices = {0, 2};
   std::vector<float> updates = {
@@ -1707,8 +1705,7 @@ TEST_F(CppEdsl, ScatterDup1D) {
   auto O = scatter(D, I, U);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
-  // Don't bother initialize 'data' while not updating.
-  // Only the shape of data is needed.
+  // Don't bother initializing 'data' in default mode. Only shape of the data is needed.
   std::vector<float> data;
   // Duplicate indices.
   std::vector<int32_t> indices = {4, 3, 3, 7};
@@ -1724,8 +1721,7 @@ TEST_F(CppEdsl, ScatterDup3D) {
   auto O = scatter(D, I, U);
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
-  // Don't bother initialize 'data' while not updating.
-  // Only the shape of data is needed.
+  // Don't bother initializing 'data' in default mode. Only shape of the data is needed.
   std::vector<float> data;
   // Duplicate indices.
   std::vector<int32_t> indices = {2, 2};
@@ -1736,10 +1732,10 @@ TEST_F(CppEdsl, ScatterDup3D) {
       7, 7, 7, 7, 8, 8, 8, 8   //
   };
   std::vector<float> expected = {
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  //
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   //
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,   //
       10, 10, 10, 10, 12, 12, 12, 12, 14, 14, 14, 14, 16, 16, 16, 16,  //
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0   //
+      0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0    //
   };
   checkExact(program, {data, indices, updates}, {expected});
 }
@@ -1846,12 +1842,12 @@ TEST_F(CppEdsl, ScatterNDUpdateSlice3) {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  //
   };
   std::vector<int32_t> indices = {
-      0, 0, 0,
-      0, 1, 2
+      0, 0, 0,  //
+      0, 1, 2,  //
   };
   std::vector<float> updates = {
-      5, 5, 5, 5,
-      6, 6, 6, 6
+      5, 5, 5, 5,  //
+      6, 6, 6, 6,  //
   };
   std::vector<float> expected = {
       5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  //
@@ -1870,24 +1866,24 @@ TEST_F(CppEdsl, ScatterElt) {
   auto program = makeProgram("scatter", {D, I, U}, {O});
 
   std::vector<int32_t> indices = {
-      2, 0,
-      3, 1
+      2, 0,  //
+      3, 1,  //
   };
   std::vector<float> updates = {
-      9, 9,
-      9, 9
+      9, 9,  //
+      9, 9,  //
   };
   std::vector<float> data = {
-      1, 1, 1, 1,
-      1, 1, 1, 1,
-      1, 1, 1, 1,
-      1, 1, 1, 1
+      1, 1, 1, 1,  //
+      1, 1, 1, 1,  //
+      1, 1, 1, 1,  //
+      1, 1, 1, 1,  //
   };
   std::vector<float> expected = {
-      9, 1, 9, 1,
-      1, 9, 1, 9,
-      1, 1, 1, 1,
-      1, 1, 1, 1
+      9, 1, 9, 1,  //
+      1, 9, 1, 9,  //
+      1, 1, 1, 1,  //
+      1, 1, 1, 1,  //
   };
   checkExact(program, {data, indices, updates}, {expected});
 };
