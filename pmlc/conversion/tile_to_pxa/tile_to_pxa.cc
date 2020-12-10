@@ -1382,65 +1382,43 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     size_t idxDims = idxShape.size();
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
     SmallVector<Value, 4> dstOps;
-    // TODO: Move this code block into separate functions?
-    if (op.updateMode() == ScatterUpdateMode::nd) {
+
+    switch (op.updateMode()) {
+    case ScatterUpdateMode::nd: {
       std::vector<Value> idxs, combIdx(idxDims);
       for (size_t i = 0; i < idxDims - 1; ++i) {
         combIdx[i] = loop.getIVs()[i];
       }
       for (int64_t i = 0; i < idxShape[idxDims - 1]; ++i) {
         combIdx[idxDims - 1] = rewriter.create<mlir::ConstantIndexOp>(loc, i);
-        Value indexVal =
-            rewriter.create<pxa::PxaLoadOp>(loc, indices, combIdx).getResult();
-
-        // Cast the index value from its integer type to the index type
-        if (!indexVal.getType().isa<IndexType>()) {
-          // cast from whatever integer type it has to index type
-          auto indexType = rewriter.getIndexType();
-          indexVal =
-              rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
-                  .getResult();
-        }
+        auto indexVal =
+            getIndexValue(loc, rewriter, indices, idxLoadMap, combIdx);
         idxs.push_back(indexVal);
       }
       dstOps.insert(dstOps.begin(), idxs.begin(), idxs.end());
       for (size_t i = idxDims - 1; i < srcDims; ++i) {
         dstOps.push_back(loop.getIVs()[i]);
       }
-    } else {
-      mlir::ValueRange idxLoadOps;
-      size_t idxStart;
-      if (op.updateMode() == ScatterUpdateMode::slice) {
-        idxLoadOps = loop.getIVs().slice(axis, idxDims);
-        idxStart = axis + idxDims - 1;
-      } else {
-        idxLoadOps = loop.getIVs().take_front(idxDims);
-        idxStart = axis;
-      }
-
-      Value indexVal =
-          rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
-              .getResult();
-
-      // Cast the index value from its integer type to the index type
-      if (!indexVal.getType().isa<IndexType>()) {
-        // cast from whatever integer type it has to index type
-        auto indexType = rewriter.getIndexType();
-        indexVal = rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
-                       .getResult();
-      }
-
-      // Combine the index value with the loop dimension indexes to create the
-      // destination affine map.
-      for (size_t i = 0; i < axis; ++i) {
-        dstOps.push_back(loop.getIVs()[i]);
-      }
-
-      for (size_t i = idxStart; i < srcDims; ++i) {
-        dstOps.push_back(loop.getIVs()[i]);
-      }
-
-      dstOps[axis] = indexVal;
+    } break;
+    case ScatterUpdateMode::slice: {
+      auto idxLoadOps = loop.getIVs().slice(axis, idxDims);
+      auto idxStart = axis + idxDims - 1;
+      auto indexVal =
+          getIndexValue(loc, rewriter, indices, idxLoadMap, idxLoadOps);
+      getOutputIndices(indexVal, axis, idxStart, srcDims, dstOps,
+                       loop.getIVs());
+    } break;
+    case ScatterUpdateMode::none:
+    case ScatterUpdateMode::elt: {
+      auto idxLoadOps = loop.getIVs().take_front(idxDims);
+      auto idxStart = axis;
+      auto indexVal =
+          getIndexValue(loc, rewriter, indices, idxLoadMap, idxLoadOps);
+      getOutputIndices(indexVal, axis, idxStart, srcDims, dstOps,
+                       loop.getIVs());
+    } break;
+    default:
+      llvm_unreachable("unrecognized scatter mode");
     }
 
     if (op.updateMode() == ScatterUpdateMode::none) {
@@ -1463,6 +1441,37 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     rewriter.create<AffineYieldOp>(loc, ArrayRef<Value>{resultMemRef});
     rewriter.replaceOp(op, loop.getResult(0));
     return success();
+  }
+
+  Value getIndexValue(Location loc, ConversionPatternRewriter &rewriter,
+                      Value indices, AffineMap idxLoadMap,
+                      mlir::ValueRange idxLoadOps) const {
+    Value indexVal =
+        rewriter.create<pxa::PxaLoadOp>(loc, indices, idxLoadMap, idxLoadOps)
+            .getResult();
+
+    // Cast the index value from its integer type to the index type
+    if (!indexVal.getType().isa<IndexType>()) {
+      // cast from whatever integer type it has to index type
+      auto indexType = rewriter.getIndexType();
+      indexVal = rewriter.create<mlir::IndexCastOp>(loc, indexVal, indexType)
+                     .getResult();
+    }
+    return indexVal;
+  }
+
+  void getOutputIndices(Value indexVal, size_t axis, size_t idxStart,
+                        size_t end, SmallVector<Value, 4> &dstOps,
+                        std::vector<BlockArgument> loopArgs) const {
+    for (size_t i = 0; i < axis; ++i) {
+      dstOps.push_back(loopArgs[i]);
+    }
+
+    for (size_t i = idxStart; i < end; ++i) {
+      dstOps.push_back(loopArgs[i]);
+    }
+
+    dstOps[axis] = indexVal;
   }
 };
 
