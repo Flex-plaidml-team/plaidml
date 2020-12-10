@@ -148,7 +148,7 @@ def ScatterOp : MaterializeOp<"scatter"> {
     RankedTensorOf<[AnyScalar]>:$indices,
     RankedTensorOf<[AnyScalar]>:$updates,
     DefaultValuedAttr<IndexAttr, "0">:$axis,
-    DefaultValuedAttr<ScatterUpdateMode, "ScatterUpdateMode::none">:$updateMode
+    DefaultValuedAttr<ScatterMode, "ScatterMode::normal">:$mode
   );
   let results = (outs RankedTensorOf<[AnyScalar]>:$result);
   let builders = [OpBuilder<
@@ -157,7 +157,7 @@ def ScatterOp : MaterializeOp<"scatter"> {
     "mlir::Type resultType, "
     "mlir::ValueRange operands, "
     "mlir::IntegerAttr axis, "
-    "mlir::IntegerAttr updateMode"
+    "mlir::IntegerAttr mode"
   >];
 
   let assemblyFormat = [{

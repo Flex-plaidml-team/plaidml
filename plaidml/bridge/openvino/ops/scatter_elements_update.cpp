@@ -38,7 +38,7 @@ void registerScatterElementsUpdate() {
     auto updates = ctx.operands.at(2);
     auto axis = cast_constant_operand<int32_t>(3, layer)[0];
 
-    auto O = edsl::scatter(data, indices, updates).axis(axis).update(edsl::ScatterUpdateMode::ELT);
+    auto O = edsl::scatter(data, indices, updates).axis(axis).mode(edsl::ScatterMode::UPDATE_ELT);
     return edsl::make_tuple(O);
   });
 }

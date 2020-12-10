@@ -23,7 +23,7 @@ void registerScatterNDUpdate() {
     auto indices = ctx.operands.at(1);
     auto updates = ctx.operands.at(2);
 
-    auto O = edsl::scatter(data, indices, updates).update(edsl::ScatterUpdateMode::ND);
+    auto O = edsl::scatter(data, indices, updates).mode(edsl::ScatterMode::UPDATE_ND);
     return edsl::make_tuple(O);
   });
 }

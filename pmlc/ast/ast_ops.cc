@@ -191,10 +191,10 @@ struct ScatterOp : Intrinsic {
           "rank.");
     }
 
-    auto updateMode = getIntegerValue(evaluator, operands[4]);
-    if (!updateMode) {
+    auto mode = getIntegerValue(evaluator, operands[4]);
+    if (!mode) {
       throw std::runtime_error(
-          "'scatter' primitive expects the 'updateMode' argument "
+          "'scatter' primitive expects the 'mode' argument "
           "to be a constant integer.");
     }
 

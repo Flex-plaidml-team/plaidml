@@ -792,22 +792,22 @@ struct ProgramBuilder {
   Value makeScatterOp(ExprNodeIntrinsic *node, ArrayRef<Value> operands) {
     TensorShape shape = evaluator.getShape(node);
     IntegerAttr axis;
-    IntegerAttr updateMode;
+    IntegerAttr mode;
 
     if (!matchPattern(operands[3], m_Constant(&axis))) {
       throw std::runtime_error(
           "'scatter' primitive expects the 'axis' argument "
           "to be a constant integer");
     }
-    if (!matchPattern(operands[4], m_Constant(&updateMode))) {
+    if (!matchPattern(operands[4], m_Constant(&mode))) {
       throw std::runtime_error(
-          "'scatter' primitive expects the 'updateMode' argument "
+          "'scatter' primitive expects the 'mode' argument "
           "to be a constant integer");
     }
     RankedTensorType resultType = builder.getRankedTensorType(shape);
     auto op = builder.create<tile::ScatterOp>(
         loc, resultType, operands.take_front(3),
-        builder.getIndexAttr(axis.getInt()), updateMode);
+        builder.getIndexAttr(axis.getInt()), mode);
     return op.result();
   }
 

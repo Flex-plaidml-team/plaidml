@@ -1001,7 +1001,7 @@ inline Tensor round(const Tensor& x) { return intrinsic("round", x); }
 /// \return Tensor
 ///
 
-enum class ScatterUpdateMode : uint64_t { NONE, SLICE, ELT, ND };
+enum class ScatterMode : uint64_t { NORMAL, UPDATE_SLICE, UPDATE_ELT, UPDATE_ND };
 
 class scatter {
  public:
@@ -1015,13 +1015,13 @@ class scatter {
     return *this;
   }
 
-  scatter& update(ScatterUpdateMode mode) {
-    update_mode_ = Tensor(static_cast<uint64_t>(mode));
+  scatter& mode(ScatterMode mode) {
+    mode_ = Tensor(static_cast<uint64_t>(mode));
     return *this;
   }
 
   Tensor build() const {
-    std::vector<Tensor> args = {x_, y_, z_, axis_, update_mode_};
+    std::vector<Tensor> args = {x_, y_, z_, axis_, mode_};
     return intrinsicCall("scatter", args);
   }
 
@@ -1032,7 +1032,7 @@ class scatter {
   Tensor y_;
   Tensor z_;
   Tensor axis_ = Tensor(0);
-  Tensor update_mode_ = Tensor(static_cast<uint64_t>(ScatterUpdateMode::NONE));
+  Tensor mode_ = Tensor(static_cast<uint64_t>(ScatterMode::NORMAL));
 };
 
 ///

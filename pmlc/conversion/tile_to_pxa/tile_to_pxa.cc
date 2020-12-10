@@ -35,7 +35,7 @@ using util::AggregationKind;
 using util::CombinationKind;
 using util::InterpolationMode;
 using util::NearestMode;
-using util::ScatterUpdateMode;
+using util::ScatterMode;
 
 namespace {
 
@@ -1337,7 +1337,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     auto resultMemRef =
         rewriter.create<AllocOp>(loc, resultMemRefType).getResult();
 
-    if (op.updateMode() != ScatterUpdateMode::none) {
+    if (op.mode() != ScatterMode::normal) {
       auto dataShape = data.getType().cast<MemRefType>().getShape();
       auto copyLoop = rewriter.create<AffineParallelOp>(
           loc, ArrayRef<Type>{data.getType()},
@@ -1383,8 +1383,8 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
     auto idxLoadMap = AffineMap::getMultiDimIdentityMap(idxDims, ctx);
     SmallVector<Value, 4> dstOps;
 
-    switch (op.updateMode()) {
-    case ScatterUpdateMode::nd: {
+    switch (op.mode()) {
+    case ScatterMode::update_nd: {
       std::vector<Value> idxs, combIdx(idxDims);
       for (size_t i = 0; i < idxDims - 1; ++i) {
         combIdx[i] = loop.getIVs()[i];
@@ -1400,7 +1400,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
         dstOps.push_back(loop.getIVs()[i]);
       }
     } break;
-    case ScatterUpdateMode::slice: {
+    case ScatterMode::update_slice: {
       auto idxLoadOps = loop.getIVs().slice(axis, idxDims);
       auto idxStart = axis + idxDims - 1;
       auto indexVal =
@@ -1408,8 +1408,8 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
       getOutputIndices(indexVal, axis, idxStart, srcDims, dstOps,
                        loop.getIVs());
     } break;
-    case ScatterUpdateMode::none:
-    case ScatterUpdateMode::elt: {
+    case ScatterMode::normal:
+    case ScatterMode::update_elt: {
       auto idxLoadOps = loop.getIVs().take_front(idxDims);
       auto idxStart = axis;
       auto indexVal =
@@ -1421,7 +1421,7 @@ struct ScatterOpConversion : public OpConversionPattern<tile::ScatterOp> {
       llvm_unreachable("unrecognized scatter mode");
     }
 
-    if (op.updateMode() == ScatterUpdateMode::none) {
+    if (op.mode() == ScatterMode::normal) {
       auto loadVal = rewriter.create<mlir::LoadOp>(loc, resultMemRef, dstOps);
       Value sumVal;
       if (srcVal.getType().isa<FloatType>()) {

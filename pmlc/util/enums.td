@@ -90,17 +90,17 @@ def NearestMode : I64EnumAttr<
   let convertFromStorage = "static_cast<" # returnType # ">($_self.getValue().getZExtValue())";
 }
 
-def ScatterUpdateMode : I64EnumAttr<
-    "ScatterUpdateMode",
+def ScatterMode : I64EnumAttr<
+    "ScatterMode",
     "Scatter update mode",
     [
-      I64EnumAttrCase<"none", 0>,
-      I64EnumAttrCase<"slice", 1>,
-      I64EnumAttrCase<"elt", 2>,
-      I64EnumAttrCase<"nd", 3>,
+      I64EnumAttrCase<"normal", 0>,
+      I64EnumAttrCase<"update_slice", 1>,
+      I64EnumAttrCase<"update_elt", 2>,
+      I64EnumAttrCase<"update_nd", 3>,
     ]> {
   let cppNamespace = "pmlc::util";
-  let returnType = "ScatterUpdateMode";
+  let returnType = "ScatterMode";
   let convertFromStorage = "static_cast<" # returnType # ">($_self.getValue().getZExtValue())";
 }
 
