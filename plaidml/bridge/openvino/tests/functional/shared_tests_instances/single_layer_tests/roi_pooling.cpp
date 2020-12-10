@@ -31,11 +31,13 @@ const auto SpecificParams = ::testing::Combine(::testing::ValuesIn(std::vector<s
                                                ::testing::ValuesIn(std::vector<float>{1.0}));
 
 INSTANTIATE_TEST_CASE_P(ROIPooling_smokeTest, ROIPoolingLayerTest,
-                        ::testing::Combine(SpecificParams,                                       //
-                                           ::testing::Values(InferenceEngine::Precision::FP32),  //
-                                           ::testing::ValuesIn(inputShape),                      //
-                                           ::testing::Values(coords),                            //
-                                           ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),  //
+                        ::testing::Combine(::testing::Values(std::vector<size_t>{2, 3, 10, 10}),          //
+                                           ::testing::Values(std::vector<size_t>{2, 5}),                  //
+                                           ::testing::Values(std::vector<size_t>{2, 2}),                  //
+                                           ::testing::ValuesIn({1.0f, 0.625f}),                           //
+                                           ::testing::Values(ngraph::helpers::ROIPoolingTypes::ROI_MAX),  //
+                                           ::testing::Values(InferenceEngine::Precision::FP32),           //
+                                           ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),           //
                         ROIPoolingLayerTest::getTestCaseName);
 
 }  // namespace
