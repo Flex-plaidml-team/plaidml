@@ -40,11 +40,13 @@ void registerEmbeddingSegmentsSum() {
     IE_ASSERT(indices.rank() == 1);
     auto segment_ids = ctx.operands.at(2);
     auto num_segments = cast_constant_operand<int32_t>(3, layer)[0];
-    int32_t default_index = -1;
+    int32_t default_index;
     edsl::Tensor per_sample_weights;
+    bool with_default_index = false;
     bool with_weights = false;
 
     if (ctx.operands.size() >= 5) {
+      with_default_index = true;
       default_index = cast_constant_operand<int32_t>(4, layer)[0];
       if (ctx.operands.size() == 6) {
         per_sample_weights = ctx.operands.at(5);
@@ -80,7 +82,7 @@ void registerEmbeddingSegmentsSum() {
     }
 
     edsl::Tensor scattered = edsl::scatter(I_scatter_init, segment_ids, I_gathered);
-    if (default_index != -1) {
+    if (with_default_index) {
       // Fill empty segments with default slice.
       O_dims[0] = edsl::TensorDim(1);
       O_idxs[0] = I_idxs[0] - default_index;
