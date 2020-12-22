@@ -1,4 +1,5 @@
 OP(Activations)
+OP(Assign)
 OP(AvgPool)
 OP(BatchNormInference)
 OP(BatchToSpace)
