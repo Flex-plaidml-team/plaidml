@@ -2099,5 +2099,28 @@ TEST_F(CppEdsl, LayerException) {
   runProgram(program);
 }
 
+TEST_F(CppEdsl, layerNoOperand) {
+  Tensor C = layer("constant", {}, [&]() {
+    std::vector<float> range_data{1, 2, 3, 4};
+    auto size = range_data.size();
+    TensorShape shape(DType::FLOAT32, {static_cast<int64_t>(size)});
+    Buffer buffer(shape);
+    buffer.copy_from(range_data.data());
+    return edsl::Constant(buffer, "range_tensor");
+  });
+  auto program = makeProgram("higher_precision_constants", {}, {C});
+
+  // clang-format off
+  // CHECK-LABEL: CppEdsl.HigherPrecisionConstants
+  // CHECK: module @higher_precision_constants
+  // CHECK: tile.add %{{.*}}, %{{.*}} : (tensor<3x3xf32>, tensor<ui64>) -> tensor<3x3xf32>
+  // CHECK: tile.add %{{.*}}, %{{.*}} : (tensor<3x3xf32>, tensor<f64>) -> tensor<3x3xf64>
+  // CHECK: return %{{.*}} : tensor<3x3xf64>
+  // clang-format on
+
+  std::vector<float> C_output{1, 2, 3, 4};
+  checkExact(program, {}, {C_output});
+}
+
 }  // namespace
 }  // namespace plaidml::edsl
