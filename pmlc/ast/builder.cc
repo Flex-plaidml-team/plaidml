@@ -708,7 +708,11 @@ struct ProgramBuilder {
     }
     llvm::SmallVector<Value, 4> innerResults;
     llvm::SetVector<Operation *> toRemove;
-    for (const ExprNodePtr &node : traversal.getFlat()) {
+    auto flat = traversal.getFlat();
+    if (!flat.size()) {
+      innerResults.push_back(layerOp.body().getArguments().back());
+    }
+    for (const ExprNodePtr &node : flat) {
       Value value = builder.lookupNode(node);
       Operation *op = value.getDefiningOp();
       if (toRemove.contains(op)) {
