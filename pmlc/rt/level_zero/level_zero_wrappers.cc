@@ -138,8 +138,11 @@ void *level_zero_schedule_write(void *host, void *dev, void *invocation,
 }
 
 void level_zero_wait(uint32_t count, ...) {
+  struct timespec before, after;
   // No submit command created in IR, so call by hand
+  SET_TIMER(before);
   level_zero_submit(instance);
+  TIME_ELAPSED_TILL_NOW(before, after, "level_zero_submit()");
 
   IVLOG(2, "level_zero_wait");
   std::vector<LevelZeroEvent *> events;
@@ -151,7 +154,9 @@ void level_zero_wait(uint32_t count, ...) {
     events.push_back(evt);
   }
   va_end(args);
+  SET_TIMER(before);
   LevelZeroEvent::wait(events);
+  TIME_ELAPSED_TILL_NOW(before, after, "LevelZeroEvent::wait()");
 }
 
 void *level_zero_schedule_barrier(void *invocation, uint32_t count, ...) {

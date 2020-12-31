@@ -7,6 +7,22 @@
 
 #include "pmlc/rt/level_zero/level_zero_device.h"
 
+#include <ctime>
+#define SET_TIMER(timespec) clock_gettime(CLOCK_MONOTONIC, &timespec)
+#define TIME_ELAPSED(before, after, level, str)                                \
+  {                                                                            \
+    float interval;                                                            \
+    interval = ((((after).tv_sec - (before).tv_sec) * 1000.0) +                \
+                (((after).tv_nsec - (before).tv_nsec) / 1000000.0));           \
+    IVLOG(level, "Time elapsed in " << str << ": " << interval << " ms");      \
+  }
+
+#define TIME_ELAPSED_TILL_NOW(before, after, str)                              \
+  {                                                                            \
+    SET_TIMER(after);                                                          \
+    TIME_ELAPSED(before, after, 1, str);                                       \
+  }
+
 namespace pmlc::rt::level_zero {
 class LevelZeroInvocation;
 class LevelZeroEvent;
