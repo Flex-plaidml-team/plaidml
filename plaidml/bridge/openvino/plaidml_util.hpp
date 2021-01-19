@@ -45,7 +45,7 @@ std::vector<T> get_constant_vector(size_t operand_idx, ngraph::Node* layer){
   if (vector_ngraph_op) {
     return vector_ngraph_op->get_vector<T>();
   } else {
-    THROW_IE_EXCEPTION << "Dynamic axis not currently supported by PlaidML plugin";
+    THROW_IE_EXCEPTION << "Dynamic vector not currently supported by PlaidML plugin";
   }
 }
 
