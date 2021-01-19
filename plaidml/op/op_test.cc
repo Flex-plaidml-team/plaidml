@@ -207,6 +207,20 @@ ConvolutionParams convParams[] = {
         },
     },
     {
+        // dilations and Pad Mode test
+        DType::FLOAT32,
+        {1, 1, 10, 10},
+        {8, 1, 4, 2},
+        [](op::convolution& conv) {
+          conv.strides({6, 2})
+              .dilations({1, 2})
+              .autopad_mode(op::AutoPadMode::SAME_UPPER)  // this pad mode make failed
+              .input_layout(plaidml::op::TensorLayout::NCX)
+              .filter_layout(plaidml::op::TensorLayout::KCX);
+          ;
+        },
+    },
+    {
         // resnet/conv1
         DType::FLOAT32,
         {1, 224, 224, 3},
