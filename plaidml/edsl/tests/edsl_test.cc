@@ -1613,21 +1613,6 @@ TEST_F(CppEdsl, Pow) {
   checkClose(program, {A_input, B_input}, {expected});
 }
 
-TEST_F(CppEdsl, logicalAnd) {
-  auto A = Placeholder(DType::FLOAT32, {3, 3});
-  std::vector<int> axes = {1};
-  auto O = cast(op::all(A, edsl::make_tuple(axes), false), DType::INT8);
-  auto program = makeProgram("logicaland", {A}, {O});
-
-  std::vector<float> A_input = {
-      0, 1, 2,  //
-      3, 4, 5,  //
-      6, 7, 8,  //
-  };
-  std::vector<int8_t> expected = {0, 1, 1};
-  checkClose(program, {A_input}, {expected});
-}
-
 TEST_F(CppEdsl, Round) {
   auto S = Placeholder(DType::FLOAT32, {3, 3});
   auto O = round(S);
