@@ -68,8 +68,8 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   auto roi_width = y_2 - y_1;
   auto roi_height = x_2 - x_1;
 
-  auto roi_h_scale = roi_height / pooled_h;
-  auto roi_w_scale = roi_width / pooled_w;
+  auto roi_h_scale = roi_height / (pooled_h - 1);
+  auto roi_w_scale = roi_width / (pooled_w - 1);
 
   auto h_tensor = edsl::cast(edsl::index({edsl::TensorDim(pooled_h)}, 0), DType::FLOAT32) * roi_h_scale + x_1;
   auto w_tensor = edsl::cast(edsl::index({edsl::TensorDim(pooled_w)}, 0), DType::FLOAT32) * roi_w_scale + y_1;
