@@ -34,7 +34,7 @@ const std::vector<std::vector<size_t>> coordShapes = {
 };
 
 const std::vector<InferenceEngine::Precision> netPRCs = {
-//    InferenceEngine::Precision::FP16,
+    //    InferenceEngine::Precision::FP16,
     InferenceEngine::Precision::FP32,
 };
 
@@ -42,7 +42,7 @@ const std::vector<float> spatial_scales = {0.625f, 1.f};
 
 const std::vector<ngraph::helpers::InputLayerType> secondaryInputTypes = {
     ngraph::helpers::InputLayerType::CONSTANT,
-//     ngraph::helpers::InputLayerType::PARAMETER,
+    //     ngraph::helpers::InputLayerType::PARAMETER,
 };
 
 const auto test_ROIPooling_max = ::testing::Combine(               //
@@ -67,7 +67,7 @@ const auto test_ROIPooling_bilinear = ::testing::Combine(               //
     ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)                  //
 );
 
-// INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_max, ROIPoolingLayerTest, test_ROIPooling_max,
-//                        ROIPoolingLayerTest::getTestCaseName);
-// INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_bilinear, ROIPoolingLayerTest, test_ROIPooling_bilinear,
-//                        ROIPoolingLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_max, ROIPoolingLayerTest, test_ROIPooling_max,
+                        ROIPoolingLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_bilinear, ROIPoolingLayerTest, test_ROIPooling_bilinear,
+                        ROIPoolingLayerTest::getTestCaseName);
