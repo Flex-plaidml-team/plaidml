@@ -21,11 +21,11 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   auto roi_w_end = coord[2];
   auto roi_h_end = coord[3];
 
-  auto roi_width = std::max(roi_w_end - roi_w_start + 1, 1.0f);
-  auto roi_height = std::max(roi_h_end - roi_h_start + 1, 1.0f);
+  float roi_width = std::max(roi_w_end - roi_w_start + 1, 1.0f);
+  float roi_height = std::max(roi_h_end - roi_h_start + 1, 1.0f);
 
-  auto bin_size_h = roi_height / pooled_h;
-  auto bin_size_w = roi_width / pooled_w;
+  float bin_size_h = roi_height / pooled_h;
+  float bin_size_w = roi_width / pooled_w;
 
   edsl::Tensor pooled_tensor;
   for (auto i = 0; i < pooled_h; i++) {
