@@ -72,11 +72,11 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   auto roi_w_end = coord[2];
   auto roi_h_end = coord[3];
 
-  auto roi_width = (roi_w_end - roi_w_start) * (width - 1);
-  auto roi_height = (roi_h_end - roi_h_start) * (height - 1);
+  float roi_width = (roi_w_end - roi_w_start) * (width - 1);
+  float roi_height = (roi_h_end - roi_h_start) * (height - 1);
 
-  auto roi_h_scale = roi_height / (pooled_h - 1);
-  auto roi_w_scale = roi_width / (pooled_w - 1);
+  float roi_h_scale = roi_height / (pooled_h - 1);
+  float roi_w_scale = roi_width / (pooled_w - 1);
 
   // get center point of every ROI bin.
   auto in_y = edsl::cast(edsl::index({edsl::TensorDim(pooled_h)}, 0), DType::FLOAT32) * roi_h_scale +
@@ -98,8 +98,8 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
 
   // gather the interpolation point from feature map.
   auto get_pieces = [](edsl::Tensor temp, edsl::Tensor y, edsl::Tensor x) {
-    auto gather_x = edsl::gather(temp, x).axis(3).interpolationMode(edsl::InterpolationMode::NEAREST);
-    auto gather_y = edsl::gather(gather_x, y).axis(2).interpolationMode(edsl::InterpolationMode::NEAREST);
+    auto gather_x = edsl::gather(temp, x).axis(3);
+    auto gather_y = edsl::gather(gather_x, y).axis(2);
     return gather_y;
   };
   edsl::Tensor top_left = get_pieces(I, top_y_index, left_x_index);
@@ -107,23 +107,15 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   edsl::Tensor bottom_left = get_pieces(I, bottom_y_index, left_x_index);
   edsl::Tensor bottom_right = get_pieces(I, bottom_y_index, right_x_index);
 
-  // we have to expend the interpolation offset weights along height.
-  std::vector<int> bData(pooled_h * 2, 0);
-  for (auto i = pooled_h; i < bData.size(); i++) {
-    bData[i] = 1;
-  }
-  TensorShape shape(DType::INT32, {pooled_h * 2});
-  Buffer buffer(shape);
-  buffer.copy_from(bData.data());
-  auto height_off = edsl::Constant(buffer, "expand offset along height");
-
+  std::vector<edsl::TensorDim> dims(I.rank());
+  I.bind_dims(dims);
+  dims[2] = edsl::TensorDim(pooled_h);
+  dims[3] = edsl::TensorDim(pooled_w);
   auto top = top_left + (top_right - top_left) * (in_x - left_x_index);
   auto bottom = bottom_left + (bottom_right - bottom_left) * (in_x - left_x_index);
-
-  edsl::Tensor y_offset = edsl::gather((in_y - top_y_index), height_off).axis(0);
-  std::vector<edsl::TensorDim> output_dims(bottom.rank());
-  bottom.bind_dims(output_dims);
-  auto output = top + (bottom - top) * edsl::reshape(y_offset, output_dims);
+  // output = top + (bottom - top) * (in_y - top_y_index), we have to reshape mul openrands.
+  auto temp_shape = edsl::reshape(bottom - top, {dims[0], dims[1], dims[3], dims[2]});
+  auto output = top + edsl::reshape(temp_shape * (in_y - top_y_index), dims);
   return output;
 }
 
