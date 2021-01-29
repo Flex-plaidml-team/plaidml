@@ -18,8 +18,6 @@
 #include "ngraph/op/util/attr_types.hpp"
 #include "ngraph/shape.hpp"
 #include "ngraph/type/element_type.hpp"
-#include "ngraph/op/constant.hpp"
-
 
 #include "plaidml/edsl/edsl.h"
 #include "plaidml/op/op.h"
