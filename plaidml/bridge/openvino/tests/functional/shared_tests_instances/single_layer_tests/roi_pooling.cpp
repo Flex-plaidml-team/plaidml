@@ -18,7 +18,6 @@ const std::vector<std::vector<size_t>> pooledShapes_max = {
     {1, 1},
     {2, 2},
     {3, 3},
-    {6, 6},
 };
 
 const std::vector<std::vector<size_t>> pooledShapes_bilinear = {
@@ -30,11 +29,9 @@ const std::vector<std::vector<size_t>> pooledShapes_bilinear = {
 const std::vector<std::vector<size_t>> coordShapes = {
     {1, 5},
     {3, 5},
-    {5, 5},
 };
 
 const std::vector<InferenceEngine::Precision> netPRCs = {
-    //    InferenceEngine::Precision::FP16,
     InferenceEngine::Precision::FP32,
 };
 
@@ -67,7 +64,18 @@ const auto test_ROIPooling_bilinear = ::testing::Combine(               //
     ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)                  //
 );
 
-INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_max, ROIPoolingLayerTest, test_ROIPooling_max,
+const auto smoke_args = ::testing::Combine(                             //
+    ::testing::Values(inShapes[0]),                                     //
+    ::testing::Values(coordShapes[0]),                                  //
+    ::testing::Values(pooledShapes_bilinear[0]),                        //
+    ::testing::Values(spatial_scales[1]),                               //
+    ::testing::Values(ngraph::helpers::ROIPoolingTypes::ROI_BILINEAR),  //
+    ::testing::ValuesIn(netPRCs),                                       //
+    ::testing::ValuesIn(secondaryInputTypes),                           //
+    ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)                  //
+);
+
+INSTANTIATE_TEST_CASE_P(ROIPooling_max, ROIPoolingLayerTest, test_ROIPooling_max, ROIPoolingLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(ROIPooling_bilinear, ROIPoolingLayerTest, test_ROIPooling_bilinear,
                         ROIPoolingLayerTest::getTestCaseName);
-INSTANTIATE_TEST_CASE_P(smoke_TestsROIPooling_bilinear, ROIPoolingLayerTest, test_ROIPooling_bilinear,
-                        ROIPoolingLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(smoke, ROIPoolingLayerTest, smoke_args, ROIPoolingLayerTest::getTestCaseName);
