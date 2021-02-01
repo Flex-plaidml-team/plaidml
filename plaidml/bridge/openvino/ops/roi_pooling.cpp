@@ -51,6 +51,7 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
       auto w_tensor = edsl::index({edsl::TensorDim(slice_w_index)}, 0) + w_index;
       auto gather_w = edsl::gather(I, w_tensor).axis(3);
       auto crop = static_cast<edsl::Tensor>(edsl::gather(gather_w, h_tensor).axis(2));
+
       // get max value from bin, then put it to pooled tensor.
       std::vector<edsl::TensorDim> dims(crop.rank());
       crop.bind_dims(dims);
@@ -113,7 +114,9 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   dims[3] = edsl::TensorDim(pooled_w);
   auto top = top_left + (top_right - top_left) * (in_x - left_x_index);
   auto bottom = bottom_left + (bottom_right - bottom_left) * (in_x - left_x_index);
-  // output = top + (bottom - top) * (in_y - top_y_index), we have to reshape mul openrands.
+
+  // final formula : output = top + (bottom - top) * (in_y - top_y_index)
+  // we have to reshape mul operands.
   auto temp_shape = edsl::reshape(bottom - top, {dims[0], dims[1], dims[3], dims[2]});
   auto output = top + edsl::reshape(temp_shape * (in_y - top_y_index), dims);
   return output;
