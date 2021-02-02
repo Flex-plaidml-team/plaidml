@@ -27,7 +27,9 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   float bin_size_h = roi_height / pooled_h;
   float bin_size_w = roi_width / pooled_w;
 
-  edsl::Tensor pooled_tensor;
+  // edsl::Tensor pooled_tensor;
+  auto shapes = I.compute_shape().sizes();
+  std::vector<edsl::Tensor> pooled_tensor;
   for (auto i = 0; i < pooled_h; i++) {
     for (auto j = 0; j < pooled_w; j++) {
       // enlarge bin.
@@ -50,20 +52,19 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
       auto h_tensor = edsl::index({edsl::TensorDim(slice_h_index)}, 0) + h_index;
       auto w_tensor = edsl::index({edsl::TensorDim(slice_w_index)}, 0) + w_index;
       auto gather_w = edsl::gather(I, w_tensor).axis(3);
-      auto crop = static_cast<edsl::Tensor>(edsl::gather(gather_w, h_tensor).axis(2));
+      edsl::Tensor crop = edsl::gather(gather_w, h_tensor).axis(2);
 
       // get max value from bin, then put it to pooled tensor.
       std::vector<edsl::TensorDim> dims(crop.rank());
       crop.bind_dims(dims);
       std::vector<edsl::TensorIndex> idx(crop.rank());
-      edsl::Tensor bin_max = edsl::Contraction()
-                                 .outShape({dims[0], dims[1], edsl::TensorDim(pooled_h), edsl::TensorDim(pooled_w)})
-                                 .outAccess({idx[0], idx[1], edsl::TensorIndex(i), edsl::TensorIndex(j)})
-                                 .max(crop(idx));
-      pooled_tensor = (i == 0 && j == 0) ? bin_max : edsl::select(pooled_tensor > bin_max, pooled_tensor, bin_max);
+      edsl::Tensor bin_max =
+          edsl::Contraction().outShape({dims[0], dims[1]}).outAccess({idx[0], idx[1]}).max(crop(idx));
+      pooled_tensor.push_back(edsl::reshape(bin_max, {shapes[0], shapes[1], 1}));
     }
   }
-  return pooled_tensor;
+
+  return edsl::reshape(op::concatenate(pooled_tensor, 2), {shapes[0], shapes[1], pooled_h, pooled_w});
 }
 
 edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, int64_t pooled_h, int64_t pooled_w,
@@ -80,46 +81,13 @@ edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, i
   float roi_w_scale = roi_width / (pooled_w - 1);
 
   // get center point of every ROI bin.
-  auto in_y = edsl::cast(edsl::index({edsl::TensorDim(pooled_h)}, 0), DType::FLOAT32) * roi_h_scale +
+  auto in_h = edsl::cast(edsl::index({edsl::TensorDim(pooled_h)}, 0), DType::FLOAT32) * roi_h_scale +
               roi_h_start * (height - 1);
-  auto in_x =
+  auto in_w =
       edsl::cast(edsl::index({edsl::TensorDim(pooled_w)}, 0), DType::FLOAT32) * roi_w_scale + roi_w_start * (width - 1);
 
-  // get it's interpolation point.
-  auto top_y_index = edsl::floor(in_y);
-  auto bottom_y_index = edsl::ceil(in_y);
-  auto left_x_index = edsl::floor(in_x);
-  auto right_x_index = edsl::ceil(in_x);
-
-  // check it border.
-  auto h_border = edsl::cast(edsl::Tensor(height - 1), DType::FLOAT32);
-  auto w_border = edsl::cast(edsl::Tensor(width - 1), DType::FLOAT32);
-  bottom_y_index = edsl::select(bottom_y_index < h_border, bottom_y_index, h_border);
-  right_x_index = edsl::select(right_x_index < w_border, right_x_index, w_border);
-
-  // gather the interpolation point from feature map.
-  auto get_pieces = [](edsl::Tensor temp, edsl::Tensor y, edsl::Tensor x) {
-    auto gather_x = edsl::gather(temp, x).axis(3);
-    auto gather_y = edsl::gather(gather_x, y).axis(2);
-    return gather_y;
-  };
-  edsl::Tensor top_left = get_pieces(I, top_y_index, left_x_index);
-  edsl::Tensor top_right = get_pieces(I, top_y_index, right_x_index);
-  edsl::Tensor bottom_left = get_pieces(I, bottom_y_index, left_x_index);
-  edsl::Tensor bottom_right = get_pieces(I, bottom_y_index, right_x_index);
-
-  std::vector<edsl::TensorDim> dims(I.rank());
-  I.bind_dims(dims);
-  dims[2] = edsl::TensorDim(pooled_h);
-  dims[3] = edsl::TensorDim(pooled_w);
-  auto top = top_left + (top_right - top_left) * (in_x - left_x_index);
-  auto bottom = bottom_left + (bottom_right - bottom_left) * (in_x - left_x_index);
-
-  // final formula : output = top + (bottom - top) * (in_y - top_y_index)
-  // we have to reshape mul operands.
-  auto temp_shape = edsl::reshape(bottom - top, {dims[0], dims[1], dims[3], dims[2]});
-  auto output = top + edsl::reshape(temp_shape * (in_y - top_y_index), dims);
-  return output;
+  auto I_gathered_h = edsl::gather(I, in_h).axis(2);
+  return edsl::gather(I_gathered_h, in_w).axis(3);
 }
 
 }  // namespace
