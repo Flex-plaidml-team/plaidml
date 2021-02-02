@@ -29,7 +29,7 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
 
   // edsl::Tensor pooled_tensor;
   auto shapes = I.compute_shape().sizes();
-  std::vector<edsl::Tensor> ROI_pools;
+  std::vector<edsl::Tensor> pooled_tensor;
   for (auto i = 0; i < pooled_h; i++) {
     for (auto j = 0; j < pooled_w; j++) {
       // enlarge bin.
@@ -60,11 +60,11 @@ edsl::Tensor crop_max_pooling(edsl::Tensor I, const std::vector<float>& coord, i
       std::vector<edsl::TensorIndex> idx(crop.rank());
       edsl::Tensor bin_max =
           edsl::Contraction().outShape({dims[0], dims[1]}).outAccess({idx[0], idx[1]}).max(crop(idx));
-      ROI_pools.push_back(edsl::reshape(bin_max, {shapes[0], shapes[1], 1}));
+      pooled_tensor.push_back(edsl::reshape(bin_max, {shapes[0], shapes[1], 1}));
     }
   }
 
-  return edsl::reshape(op::concatenate(ROI_pools, 2), {shapes[0], shapes[1], pooled_h, pooled_w});
+  return edsl::reshape(op::concatenate(pooled_tensor, 2), {shapes[0], shapes[1], pooled_h, pooled_w});
 }
 
 edsl::Tensor bilinear_pooling(edsl::Tensor I, const std::vector<float>& coord, int64_t pooled_h, int64_t pooled_w,
