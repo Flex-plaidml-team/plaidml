@@ -390,7 +390,7 @@ TEST_F(CppEdsl, ConstCast) {
 TEST_F(CppEdsl, Dot) {
   const int64_t M = 8;
   const int64_t N = 32;
-  const int64_t K = 16;
+  const int64_t K = -1;
   auto A = Placeholder(DType::FLOAT32, {M, K});
   auto B = Placeholder(DType::FLOAT32, {K, N});
   auto C = Dot(A, B);
