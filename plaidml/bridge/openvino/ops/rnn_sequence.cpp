@@ -33,21 +33,40 @@ op::RecurrentSequenceDirection to_plaidml(ngraph::op::RecurrentSequenceDirection
   }
 }
 
-edsl::Value unidirectional_rnn(edsl::Tensor X, edsl::Tensor H, edsl::Tensor W, edsl::Tensor R, edsl::Tensor B,
-                               std::vector<int64_t>& seq_lengths, int64_t batch_size, int64_t input_size,
-                               int64_t hidden_size, std::string activation, float clip, int64_t start, int64_t end,
-                               int64_t step) {
-  auto should_clip = (clip > 0.f) && (clip != std::numeric_limits<float>::infinity());
+template <typename T>
+Buffer make_buffer(DType dtype, const std::vector<int64_t>& dims, const std::vector<T>& data) {
+  TensorShape shape(dtype, dims);
+  Buffer buffer(shape);
+  buffer.copy_from(data.data());
+  return buffer;
+}
 
+edsl::Value unidirectional_rnn(edsl::Tensor X,                     //
+                               edsl::Tensor H,                     //
+                               edsl::Tensor W,                     //
+                               edsl::Tensor R,                     //
+                               edsl::Tensor B,                     //
+                               std::vector<int64_t>& seq_lengths,  //
+                               int64_t batch_size,                 //
+                               std::string activation,             //
+                               float clip,                         //
+                               int64_t start,                      //
+                               int64_t end,                        //
+                               int64_t step) {
   std::vector<edsl::Tensor> O_batched;
   std::vector<edsl::Tensor> H_batched;
+  auto should_clip = (clip > 0.f) && (clip != std::numeric_limits<float>::infinity());
   for (int i = 0; i < batch_size; i++) {
-    edsl::Tensor Ht = op::slice(H).add_dim(i).add_dim(0).add_dim(0, hidden_size);
-    auto seq_length = seq_lengths.at(i);
+    auto H_indices =
+        edsl::Constant(make_buffer(DType::INT64, std::vector<int64_t>{1, 2}, std::vector<int64_t>{i, 0}), "H_indices");
+    edsl::Tensor Ht = edsl::gather(H, H_indices).mode(edsl::GatherMode::ND);
     std::vector<edsl::Tensor> O_seq;
+    auto seq_length = seq_lengths.at(i);
     for (int j = start; j != end + step; j += step) {
       if (j < seq_length) {
-        auto Xij = op::slice(X).add_dim(i).add_dim(j).add_dim(0, input_size);
+        auto X_indices = edsl::Constant(
+            make_buffer(DType::INT64, std::vector<int64_t>{1, 2}, std::vector<int64_t>{i, j}), "X_indices");
+        edsl::Tensor Xij = edsl::gather(X, X_indices).mode(edsl::GatherMode::ND);
         auto Hij = op::dot(Xij, op::transpose(W)) + op::dot(Ht, op::transpose(R)) + B;
         Ht = clip_activation(activation, should_clip, clip, Hij);
         // TODO: weight tensor for output is NOT given
