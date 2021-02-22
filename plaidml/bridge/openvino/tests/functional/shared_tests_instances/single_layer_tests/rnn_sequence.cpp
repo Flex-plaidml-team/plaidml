@@ -51,7 +51,7 @@ INSTANTIATE_TEST_CASE_P(smoke, RNNSequenceTest,
                             ::testing::Values(3),                                                //
                             ::testing::Values(64),                                               //
                             ::testing::Values(32),                                               //
-                            ::testing::Values("tanh"),                                           //
+                            ::testing::Values(activations[0]),                                   //
                             ::testing::Values(0.8f),                                             //
                             ::testing::Values(ngraph::op::RecurrentSequenceDirection::FORWARD),  //
                             ::testing::Values(InferenceEngine::Precision::FP32),                 //

@@ -96,6 +96,13 @@ enum class PoolMode {
   _LAST,
 };
 
+enum class RecurrentSequenceDirection {
+  FORWARD,
+  REVERSE,
+  BIDIRECTIONAL,
+  _LAST,
+};
+
 enum class TensorLayout {
   NXC,
   NCX,
