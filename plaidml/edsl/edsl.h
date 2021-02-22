@@ -1740,13 +1740,13 @@ class Loop {
     yieldTensor.push_back(returnTensor);
     return *this;
   }
-  
+
   Loop& setLoopBody(loopMultifunc fn) {
     auto returnTensor = fn(loopIndex);
     yieldTensor.insert(yieldTensor.end(), returnTensor.begin(), returnTensor.end());
     return *this;
   }
-  
+
   Loop& setIter(TensorVec iter) {
     iterTensor.insert(iterTensor.end(), iter.begin(), iter.end());
     return *this;
