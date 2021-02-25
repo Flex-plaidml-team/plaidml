@@ -6,7 +6,7 @@
 #include "plaidml_util.hpp"
 
 #include "ngraph/opsets/opset.hpp"
-#include "ngraph/opsets/opset1.hpp"
+#include "ngraph/opsets/opset5.hpp"
 
 #include "plaidml/op/op.h"
 
@@ -14,13 +14,21 @@ using namespace plaidml;  // NOLINT[build/namespaces]
 
 namespace PlaidMLPlugin {
 
-void registerSplit() {
-  registerOp("split", [](const Context& ctx) {
-    auto* layer = dynamic_cast<ngraph::opset1::Split*>(ctx.layer);
+void registerLoop() {
+  registerOp("loop", [](const Context& ctx) {
+    auto* layer = ngraph::as_type<ngraph::opset5::Loop>(ctx.layer);
     IE_ASSERT(ctx.operands.size() == 2);
-    auto I = ctx.operands.at(0);
-    // operands.at(1) is unused, just read the Constant instead
-    auto splits = layer->get_num_splits();
+    auto paramVector = ctx.operands;
+
+    auto loopCount = layer->get_num_iterations();
+    auto body_ports = layer->get_special_body_ports();
+    auto loop_body = layer->get_function();
+
+    auto inputDes = layer->get_input_descriptions();
+    auto outputDes = layer->get_output_descriptions();
+
+
+
     auto axes = get_axis_vector_from_constant_operand(1, ctx.layer);
     IE_ASSERT(axes.size() == 1);
     auto axis = axes[0];
