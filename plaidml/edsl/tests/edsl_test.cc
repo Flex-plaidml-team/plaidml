@@ -2570,6 +2570,20 @@ Tensor NoneZero(Tensor A) {
 
   // Reorder output, put useless values to the end
   O = gather(O, B).axis(1);
+
+  /*
+  // This part will put all useful values to the front region of the tensor
+  TensorDim dst = r * dims;
+  auto INDEX2 = index({dst}, 0);
+  auto Max = cast(Tensor{dst}, DType::INT32);
+  O = op::reshape(O, Value(std::vector<Value>({Value(dst)})));
+  auto D = select(O != dims, INDEX2, Max);
+  auto E = argsort(cast(D, DType::FLOAT32), 0);
+  std::vector<Value> O_dims = O_subdims;
+  O_dims[0] = Value(TensorDim(dims));
+  O = op::reshape(gather(O, E).axis(0), Value(O_dims));
+  */
+
   // Use -1 to express useless values
   auto Neg1 = cast(Tensor{-1}, DType::INT32);
   return select(O == dims, Neg1, O);
