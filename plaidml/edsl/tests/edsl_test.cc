@@ -2540,5 +2540,111 @@ TEST_F(CppEdsl, ArgSort3dAxisNeg2Asc) {
   // clang-format on
 }
 
+Tensor NoneZero(Tensor A) {
+  // Use TensorDim to support potential dynamic dimension issue.
+  // Can be replaced by compute_shape
+  auto dims = A.rank();
+  std::vector<TensorDim> I_dims{dims};
+  A.bind_dims(I_dims);
+  auto DIMS = cast(Tensor{dims}, DType::INT32);
+
+  // Creat index for one dimension
+  std::vector<Value> O_subdims;
+  O_subdims.push_back(Value(TensorDim(1)));
+  TensorDim r = I_dims[0];
+  for (size_t i = 1; i < I_dims.size(); i++) {
+    r = r * I_dims[i];
+  }
+  O_subdims.push_back(Value(r));
+  auto INDEX = index(I_dims, 0);
+
+  // Use Rank as the max value, the index will not exceed this
+  auto O = op::reshape(select(A != 0.0f, INDEX, DIMS), Value(O_subdims));
+  auto B = argsort(cast(O, DType::FLOAT32), 1);
+
+  for (size_t i = 1; i < dims; i++) {
+    INDEX = index(I_dims, i);
+    auto C = op::reshape(select(A != 0.0f, INDEX, DIMS), Value(O_subdims));
+    O = op::concatenate({O, C}, 0);
+  }
+
+  // Reorder output, put useless values to the end
+  O = gather(O, B).axis(1);
+
+  /*
+  // This part will put all useful values to the front region of the tensor
+  TensorDim dst = r * dims;
+  auto INDEX2 = index({dst}, 0);
+  auto Max = cast(Tensor{dst}, DType::INT32);
+  O = op::reshape(O, Value(std::vector<Value>({Value(dst)})));
+  auto D = select(O != dims, INDEX2, Max);
+  auto E = argsort(cast(D, DType::FLOAT32), 0);
+  std::vector<Value> O_dims = O_subdims;
+  O_dims[0] = Value(TensorDim(dims));
+  O = op::reshape(gather(O, E).axis(0), Value(O_dims));
+  */
+
+  // Use -1 to express useless values
+  auto Neg1 = cast(Tensor{-1}, DType::INT32);
+  return select(O == dims, Neg1, O);
+}
+
+TEST_F(CppEdsl, NoneZero2D) {
+  auto A = Placeholder(DType::FLOAT32, {2, 2});
+  auto O = NoneZero(A);
+  auto program = makeProgram("none_zero", {A}, {O});
+
+  std::vector<int32_t> A_input = {
+      1,
+      0,
+      1,
+      1,
+  };
+
+  std::vector<int32_t> expected = {0, 1, 1, -1, 0, 0, 1, -1};
+  checkExact(program, {A_input}, {expected});
+}
+
+TEST_F(CppEdsl, NoneZero3D) {
+  auto A = Placeholder(DType::FLOAT32, {2, 2, 2});
+  auto O = NoneZero(A);
+  auto program = makeProgram("none_zero", {A}, {O});
+
+  std::vector<int32_t> A_input = {
+      1, 0, 0, 1,
+
+      1, 1, 1, 0,
+  };
+
+  std::vector<int32_t> expected = {
+      0, 0, 1, 1, 1, -1, -1, -1, 0, 1, 0, 0, 1, -1, -1, -1, 0, 1, 0, 1, 0, -1, -1, -1,
+  };
+  checkExact(program, {A_input}, {expected});
+}
+
+TEST_F(CppEdsl, NoneZero4D) {
+  auto A = Placeholder(DType::FLOAT32, {2, 2, 2, 3});
+  auto O = NoneZero(A);
+  auto program = makeProgram("none_zero", {A}, {O});
+
+  std::vector<int32_t> A_input = {
+      0, 0, 0, 0, 0, 1,
+
+      0, 1, 0, 0, 1, 1,
+
+      1, 0, 0, 1, 0, 1,
+
+      1, 1, 0, 1, 1, 1,
+  };
+
+  std::vector<int32_t> expected = {
+      0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      2, 1, 1, 2, 0, 0, 2, 0, 1, 0, 1, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  };
+  checkExact(program, {A_input}, {expected});
+}
+
 }  // namespace
 }  // namespace plaidml::edsl
