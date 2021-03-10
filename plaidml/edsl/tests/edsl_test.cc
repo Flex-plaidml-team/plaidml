@@ -2540,5 +2540,119 @@ TEST_F(CppEdsl, ArgSort3dAxisNeg2Asc) {
   // clang-format on
 }
 
+std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_per_class = 0, float iou_threshold = 0.0f,
+                        float score_threshold = 0.0f, float soft_nms_sigma = 0.0f, bool center_box_point = false) {
+  std::vector<uint64_t> boxes_shape = BOXES.compute_shape().sizes();
+  std::vector<uint64_t> scores_shape = SCORES.compute_shape().sizes();
+  int num_batches = boxes_shape[0];
+  int num_boxes = boxes_shape[1];
+  int box_size = 4;
+  int num_classes = scores_shape[1];
+  int32_t max_output_boxes_per_class = num_boxes;
+  Tensor ZERO = cast(Tensor(0), DType::FLOAT32);
+  Tensor ONE = cast(Tensor(1), DType::FLOAT32);
+  Tensor VALID_OUTPUTS = ZERO;
+
+  std::vector<Tensor> boxes;
+  std::vector<Tensor> scores;
+
+  Tensor BOXES_Y1;
+  Tensor BOXES_X1;
+  Tensor BOXES_Y2;
+  Tensor BOXES_X2;
+  if (center_point_box) {
+    Tensor BOXES_XCENTER = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(0, 1);
+    Tensor BOXES_YCENTER = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(1, 2);
+    Tensor BOXES_WIDTH_HALF_ = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(2, 3) / 2.0f;
+    Tensor BOXES_HEIGHT_HALF = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(3, 4) / 2.0f;
+    BOXES_X1 = BOXES_XCENTER - BOXES_WIDTH_HALF;
+    BOXES_X2 = BOXES_XCENTER + BOXES_WIDTH_HALF;
+    BOXES_Y1 = BOXES_YCENTER - BOXES_HEIGHT_HALF;
+    BOXES_Y2 = BOXES_YCENTER + BOXES_HEIGHT_HALF;
+  } else {
+    BOXES_Y1 = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(0, 1);
+    BOXES_X1 = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(1, 2);
+    BOXES_Y2_ = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(2, 3);
+    BOXES_X2 = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(3, 4);
+  }
+
+  for (int i = 0; i < num_batches; i++) {
+    Tensor BOXES_BATCH = op::slice(BOXES).add_dim(i, i + 1);  // 1 * num_boxes * 4
+    Tensor BOXES_BATCH_POINT1_x1 = op::slice(BOXES_BATCH
+    Tensor BOXES_BATCH
+    for (int j = 0; j < num_classes; j++) {
+      Tensor SCORES_class = op::slice(SCORES).add_dim(i, i + 1).add_dim(j, j + 1);  // 1 * 1 * num_boxes
+      Tensor INDEX = index({num_boxes}, 0);                                         // 0,1,....num_boxes-1
+      Tensor SORTINDEX = argsort(SCORES_class, 2, SortDirection::DESC);             // The index for stores
+      Tensor NEW_SCORES = gather(SCORES_class, SORTINDEX).axis(2);                  // A descend array
+      NEW_SCORES = select(NEW_SCORES > score_threshold, NEW_SCORES, ZERO);
+
+      // calc IOU
+
+      // use IOU
+      Tensor IOU_FILTER = select(IOU >= iou_threshold, ZERO, ONE);        // only keep the one with low IOU
+      Tensor IOU_FILTER_RESERVED = select(IOU == 1.0f, ONE, IOU_FILTER);  // Add the box it self
+
+      // Some are zero, some are new values
+      NEW_SCORES = NEW_SCORES * IOU_FILTER_RESERVED;  // The overlapped boxes are removed.
+
+      // May be use scatter to set 1 to score multiple
+      Tensor SORTINDEX_SORTINDEX = argsort(NEW_SCORES, 2, SortDirection::DESC);  // The index for stores
+
+      // Create selected scores
+      SCORES_SELECTED = gather(NEW_SCORES, SORINDEX_SORTINDEX).axis(2);
+      stores.push_back(SCORES_SELECTED);
+
+      // Create selected boxes
+      Tensor BOXES_SELECTED = gather(SORTINDEX, SORTINDEX_SORTINDEX).axis(0);
+      boxes.push_back(BOXES_SELECTED);
+
+      VALID_OUTPUTS = VALID_OUTPUTS + op::sum(select(NEW_SCORES != 0, 1, 0));
+    }
+  }
+
+  // concatenate scores
+  Tensor SCORES_RESULT = op::concatenate(stores, 2);
+  // concatenate boxes
+  Tensor BOXES_RESULT = op::concatenate(boxes, 2);
+
+  return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS};
+}
+
+TEST_F(CppEdsl, NMS) {
+  bool center_point_box = false;
+  int num_batches = 1;
+  int num_boxes = 5;
+  int box_size = 4;
+  int num_classes = 1;
+  int32_t max_output_boxes_per_class = num_boxes;
+  float iou_threshold = 0.5;
+  float score_threshold = 0.1;
+  float soft_nms_sigma = 0.5;
+
+  auto BOXES = Placeholder(DType::FLOAT32, {num_batches, num_boxes, 4});
+  auto SCORES = Placeholder(DType::FLOAT32, {num_batches, num_classes, num_boxes});
+  std::vector<Tensor> outputs =
+      NMS(BOXES, SCORES, max_output_boxes_per_class, iou_threshold, score_threshold, soft_nms_sigma);
+  auto program = makeProgram("nms", {BOXES, SCORES}, outputs);
+
+  std::vector<float> BOXES_input = {
+      1, 2, 3, 4, 1, 3, 3, 4, 1, 3, 4, 4, 1, 1, 4, 4, 1, 1, 3, 4,
+  };
+
+  std::vector<float> SCORES_input = {
+      0.4, 0.5, -0.72, 0.9, 0.45,
+  };
+
+  std::vector<uint32_t> BOXES_output = {
+      0, 0, 3, 0, 0, 1,
+  };
+  std::vector<float> SCORES_output = {
+      0, 0, 0.9, 0, 0, 0.4759084,
+  };
+  std::vector<int32_t> VALID_OUTPUTS_output = {2};
+  checkExact(program, {A_input, B_input}, {BOXES_input, SCORES_output, VALID_OUTPUTS_output});
+}
+
 }  // namespace
 }  // namespace plaidml::edsl
