@@ -2576,10 +2576,51 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
     BOXES_X2 = op::slice(BOXES).add_dim(0, num_batches).add_dim(0, num_boxes).add_dim(3, 4);
   }
 
+  TensorDim num_batches_td(num_batches);
+  TensorDim num_boxes_td(num_boxes);
+
+  BOXES_Y1 = reshape(BOXES_Y1, {num_batches_td, num_boxes_td});
+  BOXES_X1 = reshape(BOXES_X1, {num_batches_td, num_boxes_td});
+  BOXES_Y2 = reshape(BOXES_Y2, {num_batches_td, num_boxes_td});
+  BOXES_X2 = reshape(BOXES_X2, {num_batches_td, num_boxes_td});
+
+  Tensor IOU_AREAI = (BOXES_Y2 - BOXES_y1) * (BOXES_X2 - BOXES_X1);  // num_batches * num_boxes * 1
+  Tensor IOU_INTERSECTION_YMIN = op::maximum(reshape(BOXES_Y1, {num_batches_td, num_boxes_td, TensorDim(1)}),
+                                             reshape(BOXES_Y1, {num_batches_td, TensorDim(1), num_boxes_td}));
+  Tensor IOU_INTERSECTION_XMIN = op::maximum(reshape(BOXES_X1, {num_batches_td, num_boxes_td, TensorDim(1)}),
+                                             reshape(BOXES_X1, {num_batches_td, TensorDim(1), num_boxes_td}));
+  Tensor IOU_INTERSECTION_YMAX = op::minimum(reshape(BOXES_Y2, {num_batches_td, num_boxes_td, TensorDim(1)}),
+                                             reshape(BOXES_Y2, {num_batches_td, TensorDim(1), num_boxes_td}));
+  Tensor IOU_INTERSECTION_XMAX = op::minimum(reshape(BOXES_X2, {num_batches_td, num_boxes_td, TensorDim(1)}),
+                                             reshape(BOXES_X2, {num_batches_td, TensorDim(1), num_boxes_td}));
+  Tensor IOU_INTERSECTION_AREA_YGAP = IOU_INTERSECTION_YMAX - IOU_INTERSECTION_YMIN;
+  Tensor IOU_INTERSECTION_AREA_XGAP = IOU_INTERSECTION_XMAX - IOU_INTERSECTION_XMIN;
+  Tensor IOU_INTERSECTION_AREA = select(IOU_INTERSECTION_AREA_YGAP > 0.0f, IOU_INTERSECTION_AREA_YGAP, ZERO) *
+                                 select(IOU_INTERSECTION_AREA_XGAP > 0.0f, IOU_INTERSECTION_AREA_XGAP, ZERO);
+
+  TensorDim I, J, K;
+  TensorIndex i, j, k;
+  IOU_INTERSECTION_AREA.bind_dims(I, J, K);
+  AREAI.bind_dims(I, J);
+  Tensor AREAII = AREAI;
+  AREAII.bind_dims(I, K);
+
+  Tensor IOU_DENOMINATOR = Contraction().outShape(I, J, K).outAccess(i, j, k).assign(IOU_INTERSECTION_AREA(i, j, k) +
+                                                                                     AREAI(i, j) + AREAII(i, k));
+  Tensor IOU_DENOMINATOR_ZEROED = select(IOU_DENOMINATOR <= 0.0f, ZERO, 1 / IOU_DENOMINATOR);
+  Tensor IOU = IOU_INTERSECTION_AREA * IOU_DENOMINATOR_ZEROED;  // num_batches * num_boxes * num_boxes
+
+  /*TensorDim I, J, K;
+  TensorIndex i, j, k;
+  BOXES_Y1.bind_dims(I, J);
+  BOXES_X1.bind_dims(I, J);
+  BOXES_Y2.bind_dims(I, J);
+  BOXES_X2.bind_dims(I, J);
+  Tensor AREAI = Contraction().outShape(I, J, J).assign((BOXES_Y2(i, j) - BOXES_Y1())
+    Tensor AREA2 = */
+
   for (int i = 0; i < num_batches; i++) {
-    Tensor BOXES_BATCH = op::slice(BOXES).add_dim(i, i + 1);  // 1 * num_boxes * 4
-    Tensor BOXES_BATCH_POINT1_x1 = op::slice(BOXES_BATCH
-    Tensor BOXES_BATCH
+    Tensor BOXES_Y1_BATCH = op::slice(BOXES).add_dim(i, i + 1);  // 1 * num_boxes * 4
     for (int j = 0; j < num_classes; j++) {
       Tensor SCORES_class = op::slice(SCORES).add_dim(i, i + 1).add_dim(j, j + 1);  // 1 * 1 * num_boxes
       Tensor INDEX = index({num_boxes}, 0);                                         // 0,1,....num_boxes-1
@@ -2588,10 +2629,17 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
       NEW_SCORES = select(NEW_SCORES > score_threshold, NEW_SCORES, ZERO);
 
       // calc IOU
+      for (int k = 0; k < num_boxes; k++) {
+        // gather the iou line;
+        // select iou > threshold then 0
+        // score *
+        argMax get the largest value index gather the iou line select iou >
+            threshold as 0 update scores store largest score reset to zeor
+      }
 
       // use IOU
-      Tensor IOU_FILTER = select(IOU >= iou_threshold, ZERO, ONE);        // only keep the one with low IOU
-      Tensor IOU_FILTER_RESERVED = select(IOU == 1.0f, ONE, IOU_FILTER);  // Add the box it self
+      Tensor IOU_FILTER = select(IOU_CLASS >= iou_threshold, ZERO, ONE);        // only keep the one with low IOU
+      Tensor IOU_FILTER_RESERVED = select(IOU_CLASS == 1.0f, ONE, IOU_FILTER);  // Add the box it self
 
       // Some are zero, some are new values
       NEW_SCORES = NEW_SCORES * IOU_FILTER_RESERVED;  // The overlapped boxes are removed.
