@@ -2542,8 +2542,9 @@ TEST_F(CppEdsl, ArgSort3dAxisNeg2Asc) {
   // clang-format on
 }
 
-std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_per_class = 0, float iou_threshold = 0.0f,
-                        float score_threshold = 0.0f, float soft_nms_sigma = 0.0f, bool center_point_box = false) {
+std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_per_class, Tensor IOU_THRESHOLD,
+                        Tensor SCORE_THRESHOLD, Tensor SOFT_NMS_SIGMA, bool center_point_box,
+                        bool sort_result_descending) {
   std::vector<int64_t> boxes_shape = BOXES.compute_shape().sizes();
   std::vector<int64_t> scores_shape = SCORES.compute_shape().sizes();
   int num_batches = boxes_shape[0];
@@ -2612,10 +2613,10 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   Tensor IOU_DENOMINATOR_ZEROED = select(IOU_DENOMINATOR <= 0.0f, ZERO, 1.0f / IOU_DENOMINATOR);
   Tensor IOU = IOU_INTERSECTION_AREA * IOU_DENOMINATOR_ZEROED;  // num_batches * num_boxes * num_boxes
 
-  float weight = 0.0;
-  if (soft_nms_sigma != 0) {
-    weight = -0.5 / soft_nms_sigma;
-  }
+  Tensor WEIGHT = select(SOFT_NMS_SIGMA != 0.0f, -0.5 / SOFT_NMS_SIGMA, ZERO);
+  // if (soft_nms_sigma != 0) {
+  //  weight = -0.5 / soft_nms_sigma;
+  //}
 
   TensorShape NODE_SHAPE(DType::FLOAT32, {1, 1, 2});  // 1, 1, 2
 
@@ -2635,7 +2636,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
       Tensor SCORES_CLASS =
           op::slice(SCORES).add_dim(i, i + 1).add_dim(j, j + 1).add_dim(0, num_boxes);  // 1 * 1 * num_boxes
       IVLOG(1, "SCORES_CLASS shape: " << SCORES_CLASS.compute_shape().str());           // 1 * 1 *5
-      Tensor NEW_SCORES = select(SCORES_CLASS > score_threshold, SCORES_CLASS, ZERO);   // remove unused value
+      Tensor NEW_SCORES = select(SCORES_CLASS > SCORE_THRESHOLD, SCORES_CLASS, ZERO);   // remove unused value
       IVLOG(1, "NEW_SCORES shape: " << NEW_SCORES.compute_shape().str());               // 1 *1 * 5
 
       std::vector<int> node_index = {i, j};
@@ -2662,15 +2663,15 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
         NEW_SCORES = select(NEW_SCORES == SCORE, ZERO, NEW_SCORES);
         Tensor IOU_CANDIDATE = gather(IOU_CURRENT_BATCH, CANDIDATE_INDEX).axis(1);  // 1*1*num_boxes
         // use >= to include suppose_hard_suppresion case
-        NEW_SCORES = select(IOU_CANDIDATE >= iou_threshold, ZERO, NEW_SCORES);  // 1*1*num_boxes
+        NEW_SCORES = select(IOU_CANDIDATE >= IOU_THRESHOLD, ZERO, NEW_SCORES);  // 1*1*num_boxes
 
         Tensor BOX_INDEX = select(SCORE > 0.0f, cast(CANDIDATE_INDEX, DType::INT32), cast(NEG1, DType::INT32));
         boxes.push_back(reshape(cast(BOX_INDEX, DType::INT32), {one_td, one_td, one_td}));
 
         // update scores for current box
-        Tensor SCALE = exp(IOU_CANDIDATE * IOU_CANDIDATE * weight);
+        Tensor SCALE = exp(IOU_CANDIDATE * IOU_CANDIDATE * WEIGHT);
         NEW_SCORES = NEW_SCORES * SCALE;
-        NEW_SCORES = select(NEW_SCORES > score_threshold, NEW_SCORES, ZERO);  // remove unused value
+        NEW_SCORES = select(NEW_SCORES > SCORE_THRESHOLD, NEW_SCORES, ZERO);  // remove unused value
       }
     }
   }
@@ -2680,6 +2681,14 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   Tensor SCORES_RESULT = reshape(op::concatenate(scores, 2), {num_results_td, TensorDim(3)});
   // concatenate boxes
   Tensor BOXES_RESULT = reshape(op::concatenate(boxes, 2), {num_results_td, TensorDim(3)});
+
+  if (!sort_result_descending) {
+    // Sort across batch
+    Tensor INDEXES = op::slice(argsort(SCORES_RESULT, 0, SortDirection::DESC)).add_dim(0, num_boxes).add_dim(2, 3);
+    INDEXES = reshape(INDEXES, {num_boxes_td});
+    SCORES_RESULT = gather(SCORES_RESULT, INDEXES).axis(0);
+    BOXES_RESULT = gather(BOXES_RESULT, INDEXES).axis(0);
+  }
 
   return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS};
 }
@@ -2692,16 +2701,19 @@ TEST_F(CppEdsl, NMS) {
   int num_classes = 1;
   int32_t max_output_boxes_per_class = num_boxes;
   // when iou_threshold is 0.5, the first box will be "suppose_hard_suppress"
-  float iou_threshold = 0.5;
-  float score_threshold = 0.1;
-  float soft_nms_sigma = 0.5;
+  // float iou_threshold = 0.5;
+  // float score_threshold = 0.1;
+  // float soft_nms_sigma = 0.5;
   // float soft_nms_sigma = 0;
-
+  bool sort_result_descending = true;
+  Tensor IOU_THRESHOLD = Placeholder(DType::FLOAT32, {1});
+  Tensor SCORE_THRESHOLD = Placeholder(DType::FLOAT32, {1});
+  Tensor SOFT_NMS_SIGMA = Placeholder(DType::FLOAT32, {1});
   auto BOXES = Placeholder(DType::FLOAT32, {num_batches, num_boxes, box_size});
   auto SCORES = Placeholder(DType::FLOAT32, {num_batches, num_classes, num_boxes});
-  std::vector<Tensor> outputs =
-      NMS(BOXES, SCORES, max_output_boxes_per_class, iou_threshold, score_threshold, soft_nms_sigma, center_point_box);
-  auto program = makeProgram("nms", {BOXES, SCORES}, outputs);
+  std::vector<Tensor> outputs = NMS(BOXES, SCORES, max_output_boxes_per_class, IOU_THRESHOLD, SCORE_THRESHOLD,
+                                    SOFT_NMS_SIGMA, center_point_box, sort_result_descending);
+  auto program = makeProgram("nms", {BOXES, SCORES, IOU_THRESHOLD, SCORE_THRESHOLD, SOFT_NMS_SIGMA}, outputs);
 
   std::vector<float> BOXES_input = {
       1, 2, 3, 4, 1, 3, 3, 4, 1, 3, 4, 4, 1, 1, 4, 4, 1, 1, 3, 4,
@@ -2709,6 +2721,18 @@ TEST_F(CppEdsl, NMS) {
 
   std::vector<float> SCORES_input = {
       0.4, 0.5, -0.72, 0.9, 0.45,
+  };
+
+  std::vector<float> IOU_THRESHOLD_input = {
+      0.5,
+  };
+
+  std::vector<float> SCORE_THRESHOLD_input = {
+      0.1,
+  };
+
+  std::vector<float> SOFT_NMS_SIGMA_input = {
+      0.5,
   };
 
   std::vector<int32_t> BOXES_output = {
@@ -2733,7 +2757,8 @@ TEST_F(CppEdsl, NMS) {
     4, 2, 3, 9, 6,
     4, 2, 2, 6, 6,
   };*/
-  checkExact(program, {BOXES_input, SCORES_input}, {BOXES_output, SCORES_output, VALID_OUTPUTS_output});
+  checkExact(program, {BOXES_input, SCORES_input, IOU_THRESHOLD_input, SCORE_THRESHOLD_input, SOFT_NMS_SIGMA_input},
+             {BOXES_output, SCORES_output, VALID_OUTPUTS_output});
 }
 
 }  // namespace
