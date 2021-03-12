@@ -2657,9 +2657,15 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
     Tensor IOU_DENOMINATOR = Contraction().outShape(O_dims).outAccess(O_idxs).assign(IOU_INTERSECTION_AREA(A_idxs) +
                                                                                        IOU_AREAI(B_idxs) +
     IOU_AREAII(C_idxs));*/
-  Tensor IOU_DENOMINATOR = IOU_INTERSECTION_AREA + op::unsqueeze(IOU_AREAI, {-1}) + op::unsqueeze(IOU_AREAI, {-2});
+  // Tensor IOU_DENOMINATOR = IOU_INTERSECTION_AREA + op::repeat(op::unsqueeze(IOU_AREAI,
+  // {-1})).count(num_boxes).axis(-1) + op::repeat(op::unsqueeze(IOU_AREAI, {-2})).count(num_boxes).axis(-2);
 
-  Tensor IOU_DENOMINATOR_ZEROED = select(IOU_DENOMINATOR <= 0.0f, ZERO, 1 / IOU_DENOMINATOR);
+  // Tensor IOU_DENOMINATOR = op::repeat(op::unsqueeze(IOU_AREAI, {-1})).count(num_boxes).axis(-1) +
+  // op::repeat(op::unsqueeze(IOU_AREAI, {-2})).count(num_boxes).axis(-2) - IOU_INTERSECTION_AREA;
+
+  Tensor IOU_DENOMINATOR = op::unsqueeze(IOU_AREAI, {-1}) + op::unsqueeze(IOU_AREAI, {-2}) - IOU_INTERSECTION_AREA;
+
+  Tensor IOU_DENOMINATOR_ZEROED = select(IOU_DENOMINATOR <= 0.0f, ZERO, 1.0f / IOU_DENOMINATOR);
   Tensor IOU = IOU_INTERSECTION_AREA * IOU_DENOMINATOR_ZEROED;  // num_batches * num_boxes * num_boxes
 
   float weight = 0.0;
@@ -2770,7 +2776,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   // concatenate boxes
   Tensor BOXES_RESULT = reshape(op::concatenate(boxes, 2), {num_results_td, TensorDim(3)});
 
-  return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS};
+  return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS, IOU};
 }
 
 TEST_F(CppEdsl, NMS) {
@@ -2805,8 +2811,21 @@ TEST_F(CppEdsl, NMS) {
   std::vector<float> SCORES_output = {
       0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
-  std::vector<int32_t> VALID_OUTPUTS_output = {2};
-  checkExact(program, {BOXES_input, SCORES_input}, {BOXES_output, SCORES_output, VALID_OUTPUTS_output});
+  std::vector<float> VALID_OUTPUTS_output = {2};
+  std::vector<float> IOU_output = {
+      1,        0.5,      0.4,      0.444444, 0.666667, 0.5,      1,        0.666667, 0.222222,
+      0.333333, 0.4,      0.666667, 1,        0.333333, 0.285714, 0.444444, 0.222222, 0.333333,
+      1,        0.666667, 0.666667, 0.333333, 0.285714, 0.666667, 1,
+  };
+  // INTERSECTION_AREA is right
+  /*std::vector<float> IOU_INTERSECTION_AREA_output = {
+    4, 2, 2, 4, 4,
+    2, 2, 2, 2, 2,
+    2, 2, 3, 3, 2,
+    4, 2, 3, 9, 6,
+    4, 2, 2, 6, 6,
+  };*/
+  checkExact(program, {BOXES_input, SCORES_input}, {BOXES_output, SCORES_output, VALID_OUTPUTS_output, IOU_output});
 }
 
 }  // namespace
