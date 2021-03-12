@@ -2661,7 +2661,8 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
         NEW_SCORES = select(NEW_SCORES == SCORE, ZERO, NEW_SCORES);
         Tensor IOU_CANDIDATE = gather(IOU_CURRENT_BATCH, CANDIDATE_INDEX).axis(1);  // 1*1*num_boxes
-        NEW_SCORES = select(IOU_CANDIDATE > iou_threshold, ZERO, NEW_SCORES);       // 1*1*num_boxes
+        // use >= to include suppose_hard_suppresion case
+        NEW_SCORES = select(IOU_CANDIDATE >= iou_threshold, ZERO, NEW_SCORES);  // 1*1*num_boxes
 
         Tensor BOX_INDEX = select(SCORE > 0.0f, cast(CANDIDATE_INDEX, DType::INT32), cast(NEG1, DType::INT32));
         boxes.push_back(reshape(cast(BOX_INDEX, DType::INT32), {one_td, one_td, one_td}));
@@ -2690,8 +2691,8 @@ TEST_F(CppEdsl, NMS) {
   int box_size = 4;
   int num_classes = 1;
   int32_t max_output_boxes_per_class = num_boxes;
-  // when iou_threshold is 0.5, the first box is influenced
-  float iou_threshold = 0.49;
+  // when iou_threshold is 0.5, the first box will be "suppose_hard_suppress"
+  float iou_threshold = 0.5;
   float score_threshold = 0.1;
   float soft_nms_sigma = 0.5;
   // float soft_nms_sigma = 0;
