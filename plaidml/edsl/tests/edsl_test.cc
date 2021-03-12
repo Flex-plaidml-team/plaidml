@@ -2550,7 +2550,6 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   int num_boxes = boxes_shape[1];
   int box_size = 4;
   int num_classes = scores_shape[1];
-  // int32_t max_output_boxes_per_class = num_boxes;
   Tensor ZERO = cast(Tensor(0), DType::FLOAT32);
   Tensor ONE = cast(Tensor(1), DType::FLOAT32);
 
@@ -2607,61 +2606,6 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
   IVLOG(1, "XIN IOU_AREAI shape: " << IOU_AREAI.compute_shape().str());                          // 1*5
   IVLOG(1, "XIN IOU_INTERSECTION_AREA shape: " << IOU_INTERSECTION_AREA.compute_shape().str());  // 1*5*5
-  /*
-  TensorDim I, J, K;
-  TensorIndex i, j, k;
-  IOU_INTERSECTION_AREA.bind_dims(I, J, K);
-  IOU_AREAI.bind_dims(I, J);
-  Tensor IOU_AREAII = IOU_AREAI;
-  IOU_AREAII.bind_dims(I, K);
-
-  Tensor IOU_DENOMINATOR = Contraction().outShape(I, J, K).outAccess(i, j, k).assign(IOU_INTERSECTION_AREA(i, j, k) +
-                                                                                     IOU_AREAI(i, j) + IOU_AREAII(i,
-  k));
-                                                                                     */
-  /*std::vector<TensorDim> I_dims(IOU_INTERSECTION_AREA.rank());
-  std::vector<TensorIndex> I_idxs(IOU_INTERSECTION_AREA.rank());
-  IOU_INTERSECTION_AREA.bind_dims(I_dims);
-  auto O_dims = I_dims;
-  auto O_idxs = I_idxs;
-  std::vector<TensorIndex> A1_idxs;
-  A1_idxs.emplace_back(O_idxs.at(0));
-  A1_idxs.emplace_back(O_idxs.at(1));
-  //std::vector<TensorIndex> A2_idxs;;
-  //A2_idxs.emplace_back(O_idxs.at(0));
-  //A2_idxs.emplace_back(O_idxs.at(2));
-  //Tensor IOU_DENOMINATOR = Contraction().outShape(O_dims).outAccess(O_idxs).assign(IOU_INTERSECTION_AREA(I_idxs) +
-  //                                                                                   IOU_AREAI(A1_idxs) +
-  IOU_AREAI(A1_idxs)); Tensor IOU_DENOMINATOR =
-  Contraction().outShape(O_dims).outAccess(O_idxs).assign(IOU_INTERSECTION_AREA(I_idxs) + IOU_AREAI(A1_idxs));
-*/
-  /*  Tensor IOU_AREAII = IOU_AREAI;
-    std::vector<TensorDim> A_dims(IOU_INTERSECTION_AREA.rank());
-    std::vector<TensorDim> B_dims(IOU_AREAI.rank());
-    std::vector<TensorDim> C_dims(IOU_AREAII.rank());
-    std::vector<TensorDim> O_dims;
-    std::vector<TensorIndex> A_idxs(IOU_INTERSECTION_AREA.rank());
-    std::vector<TensorIndex> B_idxs(IOU_AREAI.rank());
-    std::vector<TensorIndex> C_idxs(IOU_AREAII.rank());
-    std::vector<TensorIndex> O_idxs;
-
-    IOU_INTERSECTION_AREA.bind_dims(A_dims);
-    IOU_AREAI.bind_dims(B_dims);
-    IOU_AREAII.bind_dims(C_dims);
-    O_dims.push_back(A_dims[0]);
-    O_idxs.push_back(A_idxs[0]);
-    O_dims.push_back(B_dims[1]);
-    O_idxs.push_back(B_idxs[1]);
-    O_dims.push_back(C_dims[1]);
-    O_idxs.push_back(C_idxs[1]);
-    Tensor IOU_DENOMINATOR = Contraction().outShape(O_dims).outAccess(O_idxs).assign(IOU_INTERSECTION_AREA(A_idxs) +
-                                                                                       IOU_AREAI(B_idxs) +
-    IOU_AREAII(C_idxs));*/
-  // Tensor IOU_DENOMINATOR = IOU_INTERSECTION_AREA + op::repeat(op::unsqueeze(IOU_AREAI,
-  // {-1})).count(num_boxes).axis(-1) + op::repeat(op::unsqueeze(IOU_AREAI, {-2})).count(num_boxes).axis(-2);
-
-  // Tensor IOU_DENOMINATOR = op::repeat(op::unsqueeze(IOU_AREAI, {-1})).count(num_boxes).axis(-1) +
-  // op::repeat(op::unsqueeze(IOU_AREAI, {-2})).count(num_boxes).axis(-2) - IOU_INTERSECTION_AREA;
 
   Tensor IOU_DENOMINATOR = op::unsqueeze(IOU_AREAI, {-1}) + op::unsqueeze(IOU_AREAI, {-2}) - IOU_INTERSECTION_AREA;
 
@@ -2672,15 +2616,6 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   if (soft_nms_sigma != 0) {
     weight = -0.5 / soft_nms_sigma;
   }
-
-  /*TensorDim I, J, K;
-  TensorIndex i, j, k;
-  BOXES_Y1.bind_dims(I, J);
-  BOXES_X1.bind_dims(I, J);
-  BOXES_Y2.bind_dims(I, J);
-  BOXES_X2.bind_dims(I, J);
-  Tensor AREAI = Contraction().outShape(I, J, J).assign((BOXES_Y2(i, j) - BOXES_Y1())
-    Tensor AREA2 = */
 
   TensorShape NODE_SHAPE(DType::FLOAT32, {1, 1, 2});  // 1, 1, 2
 
@@ -2693,7 +2628,6 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   int num_boxes_per_class = std::min(num_boxes, max_output_boxes_per_class);
 
   for (int i = 0; i < num_batches; i++) {
-    // Tensor BOXES_Y1_BATCH = op::slice(BOXES).add_dim(i, i + 1);  // 1 * num_boxes * 4
     Tensor IOU_CURRENT_BATCH =
         op::slice(IOU).add_dim(i, i + 1).add_dim(0, num_boxes).add_dim(0, num_boxes);  // 1* num_boxes * num_boxes
     IVLOG(1, "IOU CURRENT BATCH shape: " << IOU_CURRENT_BATCH.compute_shape().str());  // 1 * 5 * 5
@@ -2701,14 +2635,8 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
       Tensor SCORES_CLASS =
           op::slice(SCORES).add_dim(i, i + 1).add_dim(j, j + 1).add_dim(0, num_boxes);  // 1 * 1 * num_boxes
       IVLOG(1, "SCORES_CLASS shape: " << SCORES_CLASS.compute_shape().str());           // 1 * 1 *5
-      // Tensor INDEX = index({num_boxes}, 0);                                         // 0,1,....num_boxes-1
-      // Tensor SORTINDEX = argsort(SCORES_class, 2, SortDirection::DESC);             // The index for stores
-      // Tensor NEW_SCORES = gather(SCORES_class, SORTINDEX).axis(2);                  // A descend array
-      // NEW_SCORES = select(NEW_SCORES > score_threshold, NEW_SCORES, ZERO);
-      Tensor NEW_SCORES = select(SCORES_CLASS > score_threshold, SCORES_CLASS, ZERO);  // remove unused value
-      // Tensor NEW_SCORES = SCORES_CLASS;
-      IVLOG(1, "NEW_SCORES shape: " << NEW_SCORES.compute_shape().str());  // 1 *1 * 5
-      // NEW_SCORES = reshape(NEW_SCORES, {num_boxes_td});
+      Tensor NEW_SCORES = select(SCORES_CLASS > score_threshold, SCORES_CLASS, ZERO);   // remove unused value
+      IVLOG(1, "NEW_SCORES shape: " << NEW_SCORES.compute_shape().str());               // 1 *1 * 5
 
       std::vector<int> node_index = {i, j};
       Buffer buffer_node(NODE_SHAPE);
@@ -2717,56 +2645,32 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
       // calc IOU
       for (int k = 0; k < num_boxes_per_class; k++) {
-        // gather the iou line;
-        // select iou > threshold then 0
-        // score *
-        // argMax get the largest value index gather the iou line select iou >
-        //    threshold as 0 update scores store largest score reset to zero
         Tensor CANDIDATE_INDEX = reshape(op::argmax(NEW_SCORES, Value(2)), {TensorDim(1)});
         Tensor SCORE = reshape(gather(NEW_SCORES, CANDIDATE_INDEX).axis(2), {one_td, one_td, one_td});  // 1*1*1
         IVLOG(1, "SCORE shape: " << SCORE.compute_shape().str());                                       // 1 * 1
-        Tensor CURRENT_NODE = select(SCORE != 0.0f, NODE, INVALID_NODE);
+        Tensor CURRENT_NODE = select(SCORE > 0.0f, NODE, INVALID_NODE);
         Tensor VALID = select(SCORE != 0.0f, ONE, ZERO);
         VALID_OUTPUTS = VALID_OUTPUTS + VALID;
         IVLOG(1, "CURRENT_NODE shape: " << CURRENT_NODE.compute_shape().str());  // 1 * 1 *2
         scores.push_back(CURRENT_NODE);
         boxes.push_back(cast(CURRENT_NODE, DType::INT32));
-        SCORE = select(SCORE != 0, SCORE, NEG1);
+        SCORE = select(SCORE > 0.0f, SCORE, NEG1);
         IVLOG(1, "SCORE shape: " << SCORE.compute_shape().str());                      // 1 *1
         IVLOG(1, "CANDINATE_INDEX shape: " << CANDIDATE_INDEX.compute_shape().str());  // uint32
         scores.push_back(SCORE);
-        boxes.push_back(reshape(cast(CANDIDATE_INDEX, DType::INT32), {one_td, one_td, one_td}));
 
         NEW_SCORES = select(NEW_SCORES == SCORE, ZERO, NEW_SCORES);
         Tensor IOU_CANDIDATE = gather(IOU_CURRENT_BATCH, CANDIDATE_INDEX).axis(1);  // 1*1*num_boxes
         NEW_SCORES = select(IOU_CANDIDATE > iou_threshold, ZERO, NEW_SCORES);       // 1*1*num_boxes
+
+        Tensor BOX_INDEX = select(SCORE > 0.0f, cast(CANDIDATE_INDEX, DType::INT32), cast(NEG1, DType::INT32));
+        boxes.push_back(reshape(cast(BOX_INDEX, DType::INT32), {one_td, one_td, one_td}));
 
         // update scores for current box
         Tensor SCALE = exp(IOU_CANDIDATE * IOU_CANDIDATE * weight);
         NEW_SCORES = NEW_SCORES * SCALE;
         NEW_SCORES = select(NEW_SCORES > score_threshold, NEW_SCORES, ZERO);  // remove unused value
       }
-      /*
-            // use IOU
-            Tensor IOU_FILTER = select(IOU_CLASS >= iou_threshold, ZERO, ONE);        // only keep the one with low IOU
-            Tensor IOU_FILTER_RESERVED = select(IOU_CLASS == 1.0f, ONE, IOU_FILTER);  // Add the box it self
-
-            // Some are zero, some are new values
-            NEW_SCORES = NEW_SCORES * IOU_FILTER_RESERVED;  // The overlapped boxes are removed.
-
-            // May be use scatter to set 1 to score multiple
-            Tensor SORTINDEX_SORTINDEX = argsort(NEW_SCORES, 2, SortDirection::DESC);  // The index for stores
-
-            // Create selected scores
-            SCORES_SELECTED = gather(NEW_SCORES, SORINDEX_SORTINDEX).axis(2);
-            stores.push_back(SCORES_SELECTED);
-
-            // Create selected boxes
-            Tensor BOXES_SELECTED = gather(SORTINDEX, SORTINDEX_SORTINDEX).axis(0);
-            boxes.push_back(BOXES_SELECTED);
-
-            VALID_OUTPUTS = VALID_OUTPUTS + op::sum(select(NEW_SCORES != 0, 1, 0));
-            */
     }
   }
 
@@ -2776,7 +2680,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
   // concatenate boxes
   Tensor BOXES_RESULT = reshape(op::concatenate(boxes, 2), {num_results_td, TensorDim(3)});
 
-  return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS, IOU};
+  return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS};
 }
 
 TEST_F(CppEdsl, NMS) {
@@ -2786,10 +2690,11 @@ TEST_F(CppEdsl, NMS) {
   int box_size = 4;
   int num_classes = 1;
   int32_t max_output_boxes_per_class = num_boxes;
-  float iou_threshold = 0.5;
+  // when iou_threshold is 0.5, the first box is influenced
+  float iou_threshold = 0.49;
   float score_threshold = 0.1;
-  // float soft_nms_sigma = 0.5;
-  float soft_nms_sigma = 0;
+  float soft_nms_sigma = 0.5;
+  // float soft_nms_sigma = 0;
 
   auto BOXES = Placeholder(DType::FLOAT32, {num_batches, num_boxes, box_size});
   auto SCORES = Placeholder(DType::FLOAT32, {num_batches, num_classes, num_boxes});
@@ -2812,11 +2717,13 @@ TEST_F(CppEdsl, NMS) {
       0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
   std::vector<float> VALID_OUTPUTS_output = {2};
-  std::vector<float> IOU_output = {
-      1,        0.5,      0.4,      0.444444, 0.666667, 0.5,      1,        0.666667, 0.222222,
-      0.333333, 0.4,      0.666667, 1,        0.333333, 0.285714, 0.444444, 0.222222, 0.333333,
-      1,        0.666667, 0.666667, 0.333333, 0.285714, 0.666667, 1,
-  };
+  /*std::vector<float> IOU_output = {
+      1,        0.5,      0.4,      0.444444, 0.666667,
+      0.5,      1,        0.666667, 0.222222, 0.333333,
+      0.4,      0.666667, 1,        0.333333, 0.285714,
+      0.444444, 0.222222, 0.333333, 1,        0.666667,
+      0.666667, 0.333333, 0.285714, 0.666667, 1,
+  };*/
   // INTERSECTION_AREA is right
   /*std::vector<float> IOU_INTERSECTION_AREA_output = {
     4, 2, 2, 4, 4,
@@ -2825,7 +2732,7 @@ TEST_F(CppEdsl, NMS) {
     4, 2, 3, 9, 6,
     4, 2, 2, 6, 6,
   };*/
-  checkExact(program, {BOXES_input, SCORES_input}, {BOXES_output, SCORES_output, VALID_OUTPUTS_output, IOU_output});
+  checkExact(program, {BOXES_input, SCORES_input}, {BOXES_output, SCORES_output, VALID_OUTPUTS_output});
 }
 
 }  // namespace
