@@ -2689,16 +2689,20 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
   if (sort_result_descending) {
     // Sort across batch
-    /*Tensor SORT = argsort(SCORES_RESULT, 0, SortDirection::DESC);
+#if 1
+    // This cause free() error
+    Tensor SORT = argsort(SCORES_RESULT, 0, SortDirection::DESC);
     IVLOG(1, "xin SORT shape: " << SORT.compute_shape().str());  // 10 * 1 * si32
     Tensor INDEXES = op::slice(SORT).add_dim(0, num_results).add_dim(1, 2);
-    IVLOG(1, "xin INDEXES shape: " << INDEXES.compute_shape().str());  // 10 * 1 * si32*/
+    IVLOG(1, "xin INDEXES shape: " << INDEXES.compute_shape().str());  // 10 * 1 * si32
+#else
+    // This can run
     Tensor INDEXES1 = op::slice(SCORES_RESULT).add_dim(0, num_results).add_dim(2, 3);
     INDEXES1 = reshape(INDEXES1, {num_results_td});
     IVLOG(1, "xin INDEXES1 shape: " << INDEXES1.compute_shape().str());  // 10 * 1 * si32
     Tensor INDEXES = argsort(INDEXES1, 0, SortDirection::DESC);
     IVLOG(1, "xin SORT shape: " << INDEXES.compute_shape().str());  // 10 * 1 * si32
-
+#endif
     SCORES_RESULT = gather(SCORES_RESULT, INDEXES).axis(0);
     IVLOG(1, "xin SCORES_RESULT shape: " << SCORES_RESULT.compute_shape().str());  // 5 * 3 * fp32
     BOXES_RESULT = gather(BOXES_RESULT, INDEXES).axis(0);
