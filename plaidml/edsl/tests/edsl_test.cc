@@ -2649,7 +2649,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
         Tensor CANDIDATE_INDEX = reshape(op::argmax(NEW_SCORES, Value(2)), {TensorDim(1)});
         Tensor SCORE = reshape(gather(NEW_SCORES, CANDIDATE_INDEX).axis(2), {one_td, one_td, one_td});  // 1*1*1
         IVLOG(1, "SCORE shape: " << SCORE.compute_shape().str());                                       // 1 * 1
-        Tensor CURRENT_NODE = select(SCORE > 0.0f, NODE, INVALID_NODE);
+        Tensor CURRENT_NODE = select(SCORE > 0.0f, cast(NODE, DType::FLOAT32), INVALID_NODE);
         Tensor VALID = select(SCORE != 0.0f, ONE, ZERO);
         VALID_OUTPUTS = VALID_OUTPUTS + VALID;
         IVLOG(1, "CURRENT_NODE shape: " << CURRENT_NODE.compute_shape().str());  // 1 * 1 *2
@@ -2676,18 +2676,33 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
     }
   }
 
-  TensorDim num_results_td(num_batches * num_classes * num_boxes_per_class);
+  int num_results = num_batches * num_classes * num_boxes_per_class;
+  TensorDim num_results_td(num_results);
+  IVLOG(1, "xin scores.size: " << scores.size());
+  IVLOG(1, "xin boxes.size: " << boxes.size());
   // concatenate scores
   Tensor SCORES_RESULT = reshape(op::concatenate(scores, 2), {num_results_td, TensorDim(3)});
+  IVLOG(1, "xin SCORES_RESULT shape: " << SCORES_RESULT.compute_shape().str());  // 10 * 3 * fp32
   // concatenate boxes
   Tensor BOXES_RESULT = reshape(op::concatenate(boxes, 2), {num_results_td, TensorDim(3)});
+  IVLOG(1, "xin BOXES_RESULT shape: " << BOXES_RESULT.compute_shape().str());  // 10 * 3 * si32
 
-  if (!sort_result_descending) {
+  if (sort_result_descending) {
     // Sort across batch
-    Tensor INDEXES = op::slice(argsort(SCORES_RESULT, 0, SortDirection::DESC)).add_dim(0, num_boxes).add_dim(2, 3);
-    INDEXES = reshape(INDEXES, {num_boxes_td});
+    /*Tensor SORT = argsort(SCORES_RESULT, 0, SortDirection::DESC);
+    IVLOG(1, "xin SORT shape: " << SORT.compute_shape().str());  // 10 * 1 * si32
+    Tensor INDEXES = op::slice(SORT).add_dim(0, num_results).add_dim(1, 2);
+    IVLOG(1, "xin INDEXES shape: " << INDEXES.compute_shape().str());  // 10 * 1 * si32*/
+    Tensor INDEXES1 = op::slice(SCORES_RESULT).add_dim(0, num_results).add_dim(2, 3);
+    INDEXES1 = reshape(INDEXES1, {num_results_td});
+    IVLOG(1, "xin INDEXES1 shape: " << INDEXES1.compute_shape().str());  // 10 * 1 * si32
+    Tensor INDEXES = argsort(INDEXES1, 0, SortDirection::DESC);
+    IVLOG(1, "xin SORT shape: " << INDEXES.compute_shape().str());  // 10 * 1 * si32
+
     SCORES_RESULT = gather(SCORES_RESULT, INDEXES).axis(0);
+    IVLOG(1, "xin SCORES_RESULT shape: " << SCORES_RESULT.compute_shape().str());  // 5 * 3 * fp32
     BOXES_RESULT = gather(BOXES_RESULT, INDEXES).axis(0);
+    IVLOG(1, "xin BOXES_RESULT shape: " << BOXES_RESULT.compute_shape().str());  // 5 * 3 * si32
   }
 
   return {BOXES_RESULT, SCORES_RESULT, VALID_OUTPUTS};
@@ -2695,7 +2710,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
 TEST_F(CppEdsl, NMS) {
   bool center_point_box = false;
-  int num_batches = 1;
+  int num_batches = 2;
   int num_boxes = 5;
   int box_size = 4;
   int num_classes = 1;
@@ -2717,10 +2732,11 @@ TEST_F(CppEdsl, NMS) {
 
   std::vector<float> BOXES_input = {
       1, 2, 3, 4, 1, 3, 3, 4, 1, 3, 4, 4, 1, 1, 4, 4, 1, 1, 3, 4,
+      1, 2, 3, 4, 1, 3, 3, 4, 1, 3, 4, 4, 1, 1, 4, 4, 1, 1, 3, 4,
   };
 
   std::vector<float> SCORES_input = {
-      0.4, 0.5, -0.72, 0.9, 0.45,
+      0.4, 0.5, -0.72, 0.9, 0.45, 0.4, 0.5, -0.72, 0.9, 0.45,
   };
 
   std::vector<float> IOU_THRESHOLD_input = {
@@ -2736,12 +2752,13 @@ TEST_F(CppEdsl, NMS) {
   };
 
   std::vector<int32_t> BOXES_output = {
-      0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
   std::vector<float> SCORES_output = {
       0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
-  std::vector<float> VALID_OUTPUTS_output = {2};
+  std::vector<float> VALID_OUTPUTS_output = {4};
   /*std::vector<float> IOU_output = {
       1,        0.5,      0.4,      0.444444, 0.666667,
       0.5,      1,        0.666667, 0.222222, 0.333333,
