@@ -12,10 +12,9 @@ using LayerTestsDefinitions::NmsLayerTest;
 
 namespace {
 // Each InputShapeParams consists of Number of batches, Number of boxes, Number of classes
-const std::vector<InputShapeParams> inShapeParams = {InputShapeParams{3, 100, 5}, InputShapeParams{1, 10, 50},
-                                                     InputShapeParams{2, 50, 50}};
+const std::vector<InputShapeParams> inShapeParams = {InputShapeParams{1, 5, 1}};
 
-const std::vector<int32_t> maxOutBoxPerClass = {5, 20};
+const std::vector<int32_t> maxOutBoxPerClass = {5};
 const std::vector<float> threshold = {0.3f, 0.7f};
 const std::vector<float> sigmaThreshold = {0.0f, 0.5f};
 const std::vector<ngraph::op::v5::NonMaxSuppression::BoxEncodingType> encodType = {
