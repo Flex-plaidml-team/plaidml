@@ -2628,6 +2628,7 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
 
   int num_boxes_per_class = std::min(num_boxes, max_output_boxes_per_class);
 
+  Tensor CURRENT_NODE = INVALID_NODE;
   for (int i = 0; i < num_batches; i++) {
     Tensor IOU_CURRENT_BATCH =
         op::slice(IOU).add_dim(i, i + 1).add_dim(0, num_boxes).add_dim(0, num_boxes);  // 1* num_boxes * num_boxes
@@ -2639,17 +2640,23 @@ std::vector<Tensor> NMS(Tensor BOXES, Tensor SCORES, int32_t max_output_boxes_pe
       Tensor NEW_SCORES = select(SCORES_CLASS > SCORE_THRESHOLD, SCORES_CLASS, ZERO);   // remove unused value
       IVLOG(1, "NEW_SCORES shape: " << NEW_SCORES.compute_shape().str());               // 1 *1 * 5
 
-      std::vector<int> node_index = {i, j};
+      std::vector<float> node_index = {static_cast<float>(i), static_cast<float>(j)};
+      // std::vector<int32_t> node_index = {i, j};
       Buffer buffer_node(NODE_SHAPE);
       buffer_node.copy_from(node_index.data());
-      auto NODE = edsl::Constant(buffer_node, llvm::formatv("node{0}{1}", i, j));
+      Tensor NODE = cast(edsl::Constant(buffer_node, llvm::formatv("X{0}-{1}", i, j)), DType::INT32);
 
       // calc IOU
       for (int k = 0; k < num_boxes_per_class; k++) {
         Tensor CANDIDATE_INDEX = reshape(op::argmax(NEW_SCORES, Value(2)), {TensorDim(1)});
         Tensor SCORE = reshape(gather(NEW_SCORES, CANDIDATE_INDEX).axis(2), {one_td, one_td, one_td});  // 1*1*1
         IVLOG(1, "SCORE shape: " << SCORE.compute_shape().str());                                       // 1 * 1
-        Tensor CURRENT_NODE = select(SCORE > 0.0f, cast(NODE, DType::FLOAT32), INVALID_NODE);
+        Tensor NODE_FP = cast(NODE, DType::FLOAT32);
+        // Tensor CURRENT_NODE = select(SCORE > 0.0f, cast(NODE, DType::FLOAT32), INVALID_NODE);
+        // Tensor CURRENT_NODE = select(SCORE > 0.0f, NODE_FP, INVALID_NODE);
+        CURRENT_NODE = NODE_FP;
+        CURRENT_NODE = select(SCORE > 0.0f, CURRENT_NODE, INVALID_NODE);
+        // CURRENT_NODE = NODE_FP;
         Tensor VALID = select(SCORE != 0.0f, ONE, ZERO);
         VALID_OUTPUTS = VALID_OUTPUTS + VALID;
         IVLOG(1, "CURRENT_NODE shape: " << CURRENT_NODE.compute_shape().str());  // 1 * 1 *2
@@ -2720,7 +2727,7 @@ TEST_F(CppEdsl, NMS) {
   // float score_threshold = 0.1;
   // float soft_nms_sigma = 0.5;
   // float soft_nms_sigma = 0;
-  bool sort_result_descending = true;
+  bool sort_result_descending = false;
   Tensor IOU_THRESHOLD = Placeholder(DType::FLOAT32, {1});
   Tensor SCORE_THRESHOLD = Placeholder(DType::FLOAT32, {1});
   Tensor SOFT_NMS_SIGMA = Placeholder(DType::FLOAT32, {1});
@@ -2752,11 +2759,11 @@ TEST_F(CppEdsl, NMS) {
   };
 
   std::vector<int32_t> BOXES_output = {
-      0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      0, 0, 3, 0, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 1, 0, 3, 1, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
   std::vector<float> SCORES_output = {
       0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-      0, 0, 0.9, 0, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+      1, 0, 0.9, 1, 0, 0.4759084, -1, -1, -1, -1, -1, -1, -1, -1, -1,
   };
   std::vector<float> VALID_OUTPUTS_output = {4};
   /*std::vector<float> IOU_output = {
