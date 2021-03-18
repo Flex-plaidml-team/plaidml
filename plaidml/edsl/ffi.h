@@ -210,6 +210,16 @@ plaidml_exprs* plaidml_expr_layer_end(  //
     size_t noutputs,                    //
     plaidml_expr** outputs);
 
+plaidml_expr* plaidml_expr_loop(  //
+    plaidml_error* err,            //
+    const char* op,                //
+    size_t nindex,                 //
+    plaidml_expr** indexs,         //
+    size_t ninputs,                //
+    plaidml_expr** inputs,         //
+    size_t noutputs,               //
+    plaidml_expr** outputs);
+
 //
 // plaidml_contraction
 //

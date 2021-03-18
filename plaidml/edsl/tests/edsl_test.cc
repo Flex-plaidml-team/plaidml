@@ -2003,6 +2003,168 @@ TEST_F(CppEdsl, Lens) {
   checkExact(program, {input}, {expected});
 }
 
+TEST_F(CppEdsl, Loop) {
+  auto A = Placeholder(DType::INT32, {4});
+  auto loopBody = [&](Tensor index) { return A + 1; };
+  Tensor O = Loop(5).setIter({A}).setLoopBody(loopBody);
+  auto program = makeProgram("loop", {A}, {O});
+  std::vector<int> input = {
+      1, 1, 1, 1  //
+  };
+  std::vector<int> expected = {
+      6, 6, 6, 6  //
+  };
+  checkExact(program, {input}, {expected});
+}
+
+TEST_F(CppEdsl, LoopConstantBuffer) {
+  auto A = Placeholder(DType::FLOAT32, {4});
+  auto loopBody = [&](Tensor index) {
+    std::vector<float> test{1, 1, 1, 1};
+    auto B = Constant(makeBuffer(DType::FLOAT32, {4}, test), "test");
+    return A + B;
+  };
+  Tensor O = Loop(3, 8, 1).setIter({A}).setLoopBody(loopBody);
+  auto program = makeProgram("loop", {A}, {O});
+  std::vector<float> input = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> expected = {
+      6, 6, 6, 6  //
+  };
+  checkExact(program, {input}, {expected});
+}
+
+TEST_F(CppEdsl, LoopMultiIter) {
+  auto A = Placeholder(DType::FLOAT32, {4});
+  auto B = Placeholder(DType::FLOAT32, {4});
+  auto loopBody = [&](Tensor index) -> TensorVec {
+    auto O = A + 1;
+    auto T = B + 1;
+    return {O, T};
+  };
+  TensorVec output = Loop(10).setLoopBody(loopBody).setIter({A, B});
+  auto O = output[0] + output[1];
+  auto program = makeProgram("loop", {A, B}, {O});
+  std::vector<float> input1 = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> input2 = {
+      0, 0, 0, 0  //
+  };
+  std::vector<float> expected1 = {
+      21, 21, 21, 21  //
+  };
+  checkExact(program, {input1, input2}, {expected1});
+}
+
+/// this case got wrong result. if we switch T and O in return, then it correct.
+//TEST_F(CppEdsl, LoopMultiReturn) {
+//  auto A = Placeholder(DType::FLOAT32, {4});
+//  auto B = Placeholder(DType::FLOAT32, {4});
+//  auto loopBody = [&](Tensor index) -> TensorVec {
+//    auto T = B + 2;
+//    auto O = A + 1;
+//    return {T, O};
+//  };
+//  TensorVec output = Loop(2).setLoopBody(loopBody).setIter({A, B});
+//  auto program = makeProgram("loop", {A, B}, output);
+//  std::vector<float> input1 = {
+//      1, 1, 1, 1  //
+//  };
+//  std::vector<float> input2 = {
+//      1, 1, 1, 1  //
+//  };
+//  std::vector<float> expected1 = {
+//      4, 4, 4, 4  //
+//  };
+//  std::vector<float> expected2 = {
+//      4, 4, 4, 4  //
+//  };
+//  checkExact(program, {input1, input2}, {expected1, expected2});
+//}
+
+TEST_F(CppEdsl, LoopWithBeforeOp) {
+  auto A = Placeholder(DType::FLOAT32, {4});
+  auto B = Placeholder(DType::FLOAT32, {4});
+  auto C = A + 1;
+  auto D = C * B;
+  auto loopBody = [C, D](Tensor index) -> TensorVec {
+    std::vector<float> test{1, 1, 1, 1};
+    auto constNode = Constant(makeBuffer(DType::FLOAT32, {4}, test), "test");
+    return {C + constNode, D * 5};
+  };
+  auto output = Loop(0, 10, 3).setIter({C, D}).setLoopBody(loopBody);
+
+  auto program = makeProgram("loop", {A, B}, output);
+  std::vector<float> input1 = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> input2 = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> expected1 = {
+      6, 6, 6, 6  //
+  };
+  std::vector<float> expected2 = {
+      1250, 1250, 1250, 1250  //
+  };
+  checkExact(program, {input1, input2}, {expected1, expected2});
+}
+
+TEST_F(CppEdsl, LoopWithAfterOp) {
+  auto A = Placeholder(DType::FLOAT32, {4});
+  auto B = Placeholder(DType::FLOAT32, {4});
+  auto C = A + 1;
+  auto loopBody = [&](Tensor index) {
+    std::vector<float> test{1, 1, 2, 2};
+    auto constNode = Constant(makeBuffer(DType::FLOAT32, {4}, test), "test");
+    return C + constNode;
+  };
+  TensorVec loopResult = Loop(0, 10, 2).setIter({C}).setLoopBody(loopBody);
+  auto output = loopResult[0] + B;
+  auto program = makeProgram("loop", {A, B}, {output});
+  std::vector<float> input1 = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> input2 = {
+      2, 2, 2, 2  //
+  };
+  std::vector<float> expected1 = {
+      9, 9, 14, 14  //
+  };
+  checkExact(program, {input1, input2}, {expected1});
+}
+
+TEST_F(CppEdsl, LoopDraftSequence) {
+  auto A = Placeholder(DType::FLOAT32, {2, 4});
+  auto B = Placeholder(DType::FLOAT32, {1, 4});
+  std::vector<float> data(8, 0);
+  auto O = Constant(makeBuffer(DType::FLOAT32, {2, 4}, data), "O");
+
+  auto loopBody = [&](Tensor index) -> TensorVec {
+    Tensor piece = gather(A, index).axis(0);
+    auto temp = piece * B;
+    auto updateB = B + 5;
+    Tensor out = scatter(O, index, temp).mode(ScatterMode::UPDATE_SLICE);
+    return {updateB, out};
+  };
+  TensorVec output = Loop(2).setIter({B, O}).setLoopBody(loopBody);
+  auto program = makeProgram("loop", {A, B}, {output[1]});
+  std::vector<float> input = {
+      1, 1, 1, 1,  //
+      2, 2, 2, 2   //
+  };
+  std::vector<float> b = {
+      2, 2, 2, 2  //
+  };
+  std::vector<float> expected = {
+      2,  2,  2,  2,   //
+      14, 14, 14, 14,  //
+  };
+  checkExact(program, {input, b}, {expected});
+}
+
 TEST_F(CppEdsl, Layer) {
   auto A = Placeholder(DType::FLOAT32, {10, 20});
   Tensor O = layer("relu", {A}, [&]() { return Relu(A); });

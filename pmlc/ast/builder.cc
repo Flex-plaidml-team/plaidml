@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Matchers.h"
@@ -16,7 +17,8 @@
 #include "mlir/Support/DebugStringHelper.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/RegionUtils.h"
-#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -229,6 +231,17 @@ private:
             push(node);
           }
           for (const ExprNodePtr &node : llvm::reverse(expr->operands)) {
+            push(node);
+          }
+        })
+        .Case<ExprNodeLoop>([&](ExprNodeLoop *expr) {
+          for (const ExprNodePtr &node : llvm::reverse(expr->operands)) {
+            push(node);
+          }
+          for (const ExprNodePtr &node : llvm::reverse(expr->results)) {
+            push(node);
+          }
+          for (const ExprNodePtr &node : llvm::reverse(expr->indexs)) {
             push(node);
           }
         })
@@ -477,6 +490,7 @@ struct ProgramBuilder {
     context->getOrLoadDialect<dialect::tile::TileDialect>();
     context->getOrLoadDialect<dialect::layer::LayerDialect>();
     context->getOrLoadDialect<StandardOpsDialect>();
+    context->getOrLoadDialect<mlir::scf::SCFDialect>();
   }
 
   std::shared_ptr<Program> build(const ProgramArguments &args) {
@@ -556,6 +570,8 @@ struct ProgramBuilder {
               })
               .Case<ExprNodeLayer>(
                   [&](ExprNodeLayer *node) { return handleLayer(node); })
+              .Case<ExprNodeLoop>(
+                  [&](ExprNodeLoop *node) { return handleLoop(node); })
               .Case<ExprNodePragma>(
                   [&](ExprNodePragma *node) { return handlePragma(node); });
       if (value) {
@@ -754,6 +770,95 @@ struct ProgramBuilder {
         .create<tile::PragmaOp>(loc, tensor, node->op,
                                 builder.getDictionaryAttr(attrs))
         .result();
+  }
+
+  Value handleLoop(ExprNodeLoop *node) {
+    // take lowBound, upperBound, step from operands.
+    auto indices = node->indexs;
+    auto indexType = builder.getIndexType();
+    std::vector<Value> indexValue;
+    for (auto index : indices) {
+      auto indexNum = builder.create<mlir::IndexCastOp>(
+          loc, builder.lookupNode(index), indexType);
+      indexValue.push_back(indexNum);
+    }
+
+    SmallVector<Value, 8> InitArgs;
+    for (const ExprNodePtr &operand : node->operands) {
+      InitArgs.push_back(builder.lookupNode(operand));
+    }
+    auto results = node->results;
+    DenseSet<Value> InitArgSet;
+    InitArgSet.insert(InitArgs.begin(), InitArgs.end());
+    SmallVector<Value, 8> resultArgs;
+    for (const ExprNodePtr &result : results) {
+      resultArgs.push_back(builder.lookupNode(result));
+    }
+    SmallVector<Value> resultArgSet;
+    resultArgSet.insert(resultArgSet.begin(), resultArgs.begin(), resultArgs.end());
+
+    AstTraversal traversal(results);
+    auto scfForOp = builder.create<mlir::scf::ForOp>(
+        loc, indexValue[0], indexValue[1], indexValue[2], InitArgs);
+    OpBuilder bodyBuilder(scfForOp.getLoopBody());
+
+    BlockAndValueMapping mapper;
+    auto rawIterArgs = scfForOp.getRegionIterArgs();
+    for (auto tuple : llvm::zip(InitArgs, rawIterArgs)) {
+      Value outer, inner;
+      std::tie(outer, inner) = tuple;
+      mapper.map(outer, inner);
+    }
+    // choose the ops which should be put into loop body.
+    llvm::SetVector<Value> affectValue(InitArgs.begin(), InitArgs.end());
+    llvm::SetVector<Operation *> innerLoopValues;
+    while (!affectValue.empty()) {
+      auto uses = affectValue.back().getUses();
+      for (auto &use : uses) {
+        auto op = use.getOwner();
+        if (!innerLoopValues.contains(op) && op != scfForOp.getOperation()) {
+          for (auto result : op->getResults()) {
+            affectValue.insert(result);
+          }
+          innerLoopValues.insert(op);
+        }
+      }
+      affectValue.pop_back();
+    }
+
+    llvm::SetVector<Operation *> toRemove;
+    SmallVector<Value, 4> yieldValues(resultArgSet.size());
+    for (const ExprNodePtr &node : traversal.getFlat()) {
+      Value value = builder.lookupNode(node);
+      // skip init value.
+      if (InitArgSet.count(value)) {
+        continue;
+      }
+      Operation *op = value.getDefiningOp();
+      // skip duplicate op, and not inside loop op.
+      if (!op || toRemove.contains(op) || !innerLoopValues.contains(op)) {
+        continue;
+      }
+      Operation *clonedOp = bodyBuilder.clone(*op, mapper);
+      auto iterResult = std::find(resultArgSet.begin(), resultArgSet.end(), value);
+      if (iterResult != resultArgSet.end()) {
+        auto opResultOrder = value.dyn_cast<OpResult>().getResultNumber();
+        auto yieldValueOrder = std::distance(resultArgSet.begin(), iterResult);
+        yieldValues[yieldValueOrder] = clonedOp->getResult(opResultOrder);
+      }
+      toRemove.insert(op);
+    }
+
+    bodyBuilder.create<scf::YieldOp>(loc, yieldValues);
+    for (Operation *op : toRemove) {
+      op->erase();
+    }
+    SmallVector<Value, 4> tuple;
+    for (OpResult result : scfForOp.getResults()) {
+      tuple.push_back(result);
+    }
+    builder.exprTuples[node] = tuple;
+    return nullptr;
   }
 
   Value makeGatherOp(ExprNodeIntrinsic *node, ArrayRef<Value> operands) {
