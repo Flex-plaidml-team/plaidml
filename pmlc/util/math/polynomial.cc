@@ -414,12 +414,12 @@ IntersectParallelConstraintPair(const RangeConstraint &constraint1,
   // Combines two parallel constraints into one
   IVLOG(5, "Merging the parallel constraints " << constraint1 << ", "
                                                << constraint2);
-  if (constraint1.range <= 0) {
+  if (constraint1.range <= 0 && constraint1.range != -1) {
     throw std::runtime_error("Given constraint with empty range in "
                              "IntersectParallelConstraintPair: " +
                              to_string(constraint1));
   }
-  if (constraint2.range <= 0) {
+  if (constraint2.range <= 0 && constraint1.range != -1) {
     throw std::runtime_error("Given constraint with empty range in "
                              "IntersectParallelConstraintPair: " +
                              to_string(constraint2));

@@ -321,7 +321,7 @@ void Evaluator::bindDims(const ExprNodePtr &expr,
           }
         })
         .Case<DimNodeLiteral>([&](auto *node) {
-          if (dim && dim != node->value) {
+          if (dim && dim != node->value && node->value != -1) {
             failed = true;
           }
         })

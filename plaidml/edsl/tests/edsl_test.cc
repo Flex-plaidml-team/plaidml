@@ -383,6 +383,38 @@ TEST_F(CppEdsl, ConstCast) {
   checkExact(program, {}, {expected});
 }
 
+TEST_F(CppEdsl, DotDynamic) {
+  const int64_t M = 8;
+  const int64_t N = 32;
+  const int64_t K = 16;
+  const int64_t DS = -1;
+  auto A = Placeholder(DType::FLOAT32, {M, DS});
+  auto B = Placeholder(DType::FLOAT32, {DS, N});
+  auto C = Dot(A, B);
+  auto program = makeProgram("dot", {A, B}, {C});
+
+  std::default_random_engine rng(2);
+  std::normal_distribution<float> normal_dist(0.0, 1.0);
+
+  std::vector<float> in1(M * K);
+  for (unsigned i = 0; i < in1.size(); i++) {
+    in1[i] = normal_dist(rng);
+  }
+  std::vector<float> in2(K * N);
+  for (unsigned i = 0; i < in2.size(); i++) {
+    in2[i] = normal_dist(rng);
+  }
+  std::vector<float> expected(M * N);
+  for (int i = 0; i < M; i++) {
+    for (int j = 0; j < N; j++) {
+      for (int k = 0; k < K; k++) {
+        expected[i * N + j] += in1[i * K + k] * in2[k * N + j];
+      }
+    }
+  }
+  checkClose(program, {in1, in2}, {expected});
+}
+
 TEST_F(CppEdsl, Dot) {
   const int64_t M = 8;
   const int64_t N = 32;
