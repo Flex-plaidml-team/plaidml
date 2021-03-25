@@ -76,20 +76,14 @@ std::vector<edsl::Tensor> nms::build() {
   std::vector<int64_t> scores_shape = SCORES_.compute_shape().sizes();
   int num_batches = boxes_shape[0];
   int num_boxes = boxes_shape[1];
-  int box_size = 4;
   int num_classes = scores_shape[1];
 
-  edsl::Tensor PIECE = edsl::cast(edsl::index({edsl::TensorDim(box_size)}, 0), box_input_type_);
-  edsl::Tensor ZERO = edsl::reshape(op::slice(PIECE).add_dims({0}), {edsl::TensorDim(1)});
+  // Used for gather and select
+  edsl::Tensor ZERO = edsl::cast(edsl::index({edsl::TensorDim(1)}, 0), box_input_type_);
   edsl::Tensor ZERO_INT = edsl::cast(ZERO, DType::INT32);
-  edsl::Tensor ONE = edsl::reshape(op::slice(PIECE).add_dims({1}), {edsl::TensorDim(1)});
-  edsl::Tensor ONE_INT = edsl::cast(ONE, DType::INT32);
-  edsl::Tensor TWO = edsl::reshape(op::slice(PIECE).add_dims({2}), {edsl::TensorDim(1)});
-  edsl::Tensor TWO_INT = edsl::cast(TWO, DType::INT32);
-  edsl::Tensor THREE = edsl::reshape(op::slice(PIECE).add_dims({3}), {edsl::TensorDim(1)});
-  edsl::Tensor THREE_INT = edsl::cast(THREE, DType::INT32);
+  edsl::Tensor ONE = ZERO + 1;
+  edsl::Tensor ONE_INT = ZERO_INT + 1;
   edsl::Tensor NEG1 = -ONE;
-  edsl::Tensor NEG1_INT = edsl::cast(NEG1, DType::INT32);
   edsl::Tensor NEG1_O = edsl::cast(NEG1, box_output_type_);
 
   std::vector<edsl::Tensor> boxes;
@@ -103,9 +97,9 @@ std::vector<edsl::Tensor> nms::build() {
   if (center_point_box_) {
     edsl::Tensor BOXES_XCENTER = edsl::gather(BOXES_, ZERO_INT).axis(2);
     edsl::Tensor BOXES_YCENTER = edsl::gather(BOXES_, ONE_INT).axis(2);
-    edsl::Tensor BOXES_WIDTH_HALF = edsl::gather(BOXES_, TWO_INT).axis(2);
+    edsl::Tensor BOXES_WIDTH_HALF = edsl::gather(BOXES_, ONE_INT + 1).axis(2);
     BOXES_WIDTH_HALF = BOXES_WIDTH_HALF / 2.0f;
-    edsl::Tensor BOXES_HEIGHT_HALF = edsl::gather(BOXES_, THREE_INT).axis(2);
+    edsl::Tensor BOXES_HEIGHT_HALF = edsl::gather(BOXES_, ONE_INT + 2).axis(2);
     BOXES_HEIGHT_HALF = BOXES_HEIGHT_HALF / 2.0f;
     BOXES_X1 = BOXES_XCENTER - BOXES_WIDTH_HALF;
     BOXES_X2 = BOXES_XCENTER + BOXES_WIDTH_HALF;
@@ -114,8 +108,8 @@ std::vector<edsl::Tensor> nms::build() {
   } else {
     BOXES_Y1 = edsl::gather(BOXES_, ZERO_INT).axis(2);
     BOXES_X1 = edsl::gather(BOXES_, ONE_INT).axis(2);
-    BOXES_Y2 = edsl::gather(BOXES_, TWO_INT).axis(2);
-    BOXES_X2 = edsl::gather(BOXES_, THREE_INT).axis(2);
+    BOXES_Y2 = edsl::gather(BOXES_, ONE_INT + 1).axis(2);
+    BOXES_X2 = edsl::gather(BOXES_, ONE_INT + 2).axis(2);
   }
 
   BOXES_Y1 = edsl::reshape(BOXES_Y1, {num_batches, num_boxes});
@@ -185,11 +179,7 @@ std::vector<edsl::Tensor> nms::build() {
     // Set scores of current box and boxes which have IOU larger than threshold to zero
     // The scores can be same, use scatter to update current node
     edsl::Tensor NEW_SCORES_UPDATE =
-        edsl::scatter(NEW_SCORES,
-                      edsl::reshape(edsl::cast(CANDIDATE_INDEX, DType::INT32), {num_batches, num_classes, 1}),
-                      ZERO_SCATTER)
-            .axis(2)
-            .mode(edsl::ScatterMode::UPDATE_ELT);
+        edsl::scatter(NEW_SCORES, CANDIDATE_INDEX, ZERO_SCATTER).axis(2).mode(edsl::ScatterMode::UPDATE_ELT);
     NEW_SCORES = edsl::reshape(NEW_SCORES_UPDATE, {num_batches, num_classes, num_boxes});
 
     edsl::Tensor IOU_CANDIDATE = edsl::gather(IOU, CANDIDATE_INDEX).mode(edsl::GatherMode::ND).batchDims(1);
@@ -217,7 +207,7 @@ std::vector<edsl::Tensor> nms::build() {
 
   if (sort_result_descending_) {
     // Sort across batch
-    edsl::Tensor SCORES_SLICE = edsl::gather(SCORES_RESULT, TWO_INT).axis(1);
+    edsl::Tensor SCORES_SLICE = edsl::gather(SCORES_RESULT, ONE_INT + 1).axis(1);
     SCORES_SLICE = edsl::reshape(SCORES_SLICE, {edsl::TensorDim(num_results)});
     edsl::Tensor INDEXES = edsl::argsort(SCORES_SLICE, 0, edsl::SortDirection::DESC);
 
