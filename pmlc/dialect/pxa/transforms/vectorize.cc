@@ -11,6 +11,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Interfaces/VectorInterfaces.h"
@@ -123,6 +124,50 @@ private:
 
     vectorizedOps.insert(op);
     return success();
+  }
+
+  template <typename OpTy>
+  void vectorizeMathOp(OpTy op) {
+    OpBuilder builder(op);
+    auto loc = op.getLoc();
+
+    // For each non-vector operand, broadcast as needed
+    mlir::Value operand = op.getOperand();
+    if (!operand.getType().isa<VectorType>()) {
+      auto vectorType = VectorType::get({vectorWidth}, operand.getType());
+      auto broadcast =
+          builder.create<vector::BroadcastOp>(loc, vectorType, operand);
+      operand.replaceAllUsesWith(broadcast);
+    }
+    // Update the result type
+    auto result = op.getResult();
+    auto vectorType = VectorType::get({vectorWidth}, result.getType());
+    result.setType(vectorType);
+
+    auto memrefType =
+        MemRefType::get(vectorType.getShape(), vectorType.getElementType());
+    auto vecMem = builder.create<AllocOp>(loc, memrefType);
+    SmallVector<Value, 8> vectorIvs{builder.create<ConstantIndexOp>(loc, 0)};
+    builder.create<vector::TransferWriteOp>(loc, operand, vecMem, vectorIvs);
+
+    auto parallelOp = builder.create<AffineParallelOp>(
+        loc, ArrayRef<Type>{}, ArrayRef<AtomicRMWKind>{},
+        AffineMap::getConstantMap(0, op.getContext()), ValueRange(),
+        AffineMap::getConstantMap(vectorWidth, op.getContext()), ValueRange(),
+        ArrayRef<int64_t>{1});
+    auto parallelBody = parallelOp.getBody();
+    builder.setInsertionPointToStart(parallelBody);
+
+    auto elementIvs = parallelBody->getArguments();
+    auto element = builder.create<LoadOp>(loc, vecMem, elementIvs);
+    auto expResult = builder.create<OpTy>(loc, element).getResult();
+    builder.create<AffineStoreOp>(loc, expResult, vecMem, elementIvs);
+
+    builder.setInsertionPointAfter(parallelOp);
+    auto newOp = builder.create<vector::TransferReadOp>(loc, vectorType, vecMem,
+                                                        vectorIvs);
+    op.replaceAllUsesWith(newOp.getOperation());
+    op.erase();
   }
 
   LogicalResult tryVectorizeScalarOp(Operation *op) {
@@ -241,6 +286,7 @@ public:
     TypeSwitch<Operation *>(op)
         .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
         .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
+        .Case<math::ExpOp>([&](auto op) { vectorizeMathOp<math::ExpOp>(op); })
         .Default([&](Operation *op) { vectorizeScalarOp(op); });
   }
 
