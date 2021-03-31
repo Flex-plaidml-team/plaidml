@@ -151,7 +151,8 @@ private:
     builder.create<vector::TransferWriteOp>(loc, operand, vecMem, vectorIvs);
 
     auto parallelOp = builder.create<AffineParallelOp>(
-        loc, ArrayRef<Type>{}, ArrayRef<AtomicRMWKind>{},
+        loc, ArrayRef<Type>{memrefType},
+        ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign},
         AffineMap::getConstantMap(0, op.getContext()), ValueRange(),
         AffineMap::getConstantMap(vectorWidth, op.getContext()), ValueRange(),
         ArrayRef<int64_t>{1});
@@ -159,14 +160,17 @@ private:
     builder.setInsertionPointToStart(parallelBody);
 
     auto elementIvs = parallelBody->getArguments();
-    auto element = builder.create<LoadOp>(loc, vecMem, elementIvs);
-    auto expResult = builder.create<OpTy>(loc, element).getResult();
-    builder.create<AffineStoreOp>(loc, expResult, vecMem, elementIvs);
+    auto element = builder.create<AffineLoadOp>(loc, vecMem, elementIvs);
+    auto mathOpResult = builder.create<OpTy>(loc, element).getResult();
+    auto idMap = builder.getMultiDimIdentityMap(memrefType.getRank());
+    auto reduceOp = builder.create<pxa::PxaReduceOp>(
+        loc, AtomicRMWKind::assign, mathOpResult, vecMem, idMap, elementIvs);
+    builder.create<AffineYieldOp>(loc, reduceOp.getResult());
 
     builder.setInsertionPointAfter(parallelOp);
-    auto newOp = builder.create<vector::TransferReadOp>(loc, vectorType, vecMem,
-                                                        vectorIvs);
-    op.replaceAllUsesWith(newOp.getOperation());
+    auto vectorOp = builder.create<vector::TransferReadOp>(
+        loc, vectorType, parallelOp.getResult(0), vectorIvs);
+    op.replaceAllUsesWith(vectorOp.getOperation());
     op.erase();
   }
 
@@ -286,7 +290,23 @@ public:
     TypeSwitch<Operation *>(op)
         .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
         .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
+        .Case<math::AtanOp>([&](auto op) { vectorizeMathOp<math::AtanOp>(op); })
+        .Case<math::CosOp>([&](auto op) { vectorizeMathOp<math::CosOp>(op); })
+        .Case<math::Exp2Op>([&](auto op) { vectorizeMathOp<math::Exp2Op>(op); })
+        .Case<math::ExpM1Op>(
+            [&](auto op) { vectorizeMathOp<math::ExpM1Op>(op); })
         .Case<math::ExpOp>([&](auto op) { vectorizeMathOp<math::ExpOp>(op); })
+        .Case<math::Log10Op>(
+            [&](auto op) { vectorizeMathOp<math::Log10Op>(op); })
+        .Case<math::Log1pOp>(
+            [&](auto op) { vectorizeMathOp<math::Log1pOp>(op); })
+        .Case<math::Log2Op>([&](auto op) { vectorizeMathOp<math::Log2Op>(op); })
+        .Case<math::LogOp>([&](auto op) { vectorizeMathOp<math::LogOp>(op); })
+        .Case<math::RsqrtOp>(
+            [&](auto op) { vectorizeMathOp<math::RsqrtOp>(op); })
+        .Case<math::SinOp>([&](auto op) { vectorizeMathOp<math::SinOp>(op); })
+        .Case<math::SqrtOp>([&](auto op) { vectorizeMathOp<math::SqrtOp>(op); })
+        .Case<math::TanhOp>([&](auto op) { vectorizeMathOp<math::TanhOp>(op); })
         .Default([&](Operation *op) { vectorizeScalarOp(op); });
   }
 
