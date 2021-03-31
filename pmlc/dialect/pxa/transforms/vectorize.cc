@@ -127,7 +127,12 @@ private:
   }
 
   template <typename OpTy>
-  void vectorizeMathOp(OpTy op) {
+  void vectorizeMathUnaryOp(OpTy op) {
+    if (op->getNumOperands() != 1) {
+      op->emitRemark("Vectorize op: Failed, op has more than 1 operand");
+      return;
+    }
+
     OpBuilder builder(op);
     auto loc = op.getLoc();
 
@@ -165,6 +170,66 @@ private:
     auto idMap = builder.getMultiDimIdentityMap(memrefType.getRank());
     auto reduceOp = builder.create<pxa::PxaReduceOp>(
         loc, AtomicRMWKind::assign, mathOpResult, vecMem, idMap, elementIvs);
+    builder.create<AffineYieldOp>(loc, reduceOp.getResult());
+
+    builder.setInsertionPointAfter(parallelOp);
+    auto vectorOp = builder.create<vector::TransferReadOp>(
+        loc, vectorType, parallelOp.getResult(0), vectorIvs);
+    op.replaceAllUsesWith(vectorOp.getOperation());
+    op.erase();
+  }
+
+  template <typename OpTy>
+  void vectorizeMathBinaryOp(OpTy op) {
+    if (op->getNumOperands() != 2) {
+      op->emitRemark("Vectorize op: Failed, op does not have 2 operands");
+      return;
+    }
+    OpBuilder builder(op);
+    auto loc = op.getLoc();
+
+    // For each non-vector operand, broadcast as needed
+    for (mlir::Value operand : op.getOperands()) {
+      if (!operand.getType().isa<VectorType>()) {
+        auto vectorType = VectorType::get({vectorWidth}, operand.getType());
+        auto broadcast =
+            builder.create<vector::BroadcastOp>(loc, vectorType, operand);
+        operand.replaceAllUsesWith(broadcast);
+      }
+    }
+    // Update the result type
+    auto result = op.getResult();
+    auto vectorType = VectorType::get({vectorWidth}, result.getType());
+    result.setType(vectorType);
+
+    auto memrefType =
+        MemRefType::get(vectorType.getShape(), vectorType.getElementType());
+    SmallVector<Value, 8> vectorIvs{builder.create<ConstantIndexOp>(loc, 0)};
+
+    mlir::Value operand1 = op.getOperand(0);
+    auto vecMem1 = builder.create<AllocOp>(loc, memrefType);
+    builder.create<vector::TransferWriteOp>(loc, operand1, vecMem1, vectorIvs);
+    mlir::Value operand2 = op.getOperand(1);
+    auto vecMem2 = builder.create<AllocOp>(loc, memrefType);
+    builder.create<vector::TransferWriteOp>(loc, operand2, vecMem2, vectorIvs);
+
+    auto parallelOp = builder.create<AffineParallelOp>(
+        loc, ArrayRef<Type>{memrefType},
+        ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign},
+        AffineMap::getConstantMap(0, op.getContext()), ValueRange(),
+        AffineMap::getConstantMap(vectorWidth, op.getContext()), ValueRange(),
+        ArrayRef<int64_t>{1});
+    auto parallelBody = parallelOp.getBody();
+    builder.setInsertionPointToStart(parallelBody);
+
+    auto elementIvs = parallelBody->getArguments();
+    auto element1 = builder.create<AffineLoadOp>(loc, vecMem1, elementIvs);
+    auto element2 = builder.create<AffineLoadOp>(loc, vecMem2, elementIvs);
+    auto mathOpResult =
+        builder.create<OpTy>(loc, element1, element2).getResult();
+    auto idMap = builder.getMultiDimIdentityMap(memrefType.getRank());
+    auto reduceOp = builder.create<pxa::PxaReduceOp>(
+        loc, AtomicRMWKind::assign, mathOpResult, vecMem1, idMap, elementIvs);
     builder.create<AffineYieldOp>(loc, reduceOp.getResult());
 
     builder.setInsertionPointAfter(parallelOp);
@@ -290,23 +355,36 @@ public:
     TypeSwitch<Operation *>(op)
         .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
         .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
-        .Case<math::AtanOp>([&](auto op) { vectorizeMathOp<math::AtanOp>(op); })
-        .Case<math::CosOp>([&](auto op) { vectorizeMathOp<math::CosOp>(op); })
-        .Case<math::Exp2Op>([&](auto op) { vectorizeMathOp<math::Exp2Op>(op); })
+        .Case<math::Atan2Op>(
+            [&](auto op) { vectorizeMathBinaryOp<math::Atan2Op>(op); })
+        .Case<math::AtanOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::AtanOp>(op); })
+        .Case<math::CosOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::CosOp>(op); })
+        .Case<math::Exp2Op>(
+            [&](auto op) { vectorizeMathUnaryOp<math::Exp2Op>(op); })
         .Case<math::ExpM1Op>(
-            [&](auto op) { vectorizeMathOp<math::ExpM1Op>(op); })
-        .Case<math::ExpOp>([&](auto op) { vectorizeMathOp<math::ExpOp>(op); })
+            [&](auto op) { vectorizeMathUnaryOp<math::ExpM1Op>(op); })
+        .Case<math::ExpOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::ExpOp>(op); })
         .Case<math::Log10Op>(
-            [&](auto op) { vectorizeMathOp<math::Log10Op>(op); })
+            [&](auto op) { vectorizeMathUnaryOp<math::Log10Op>(op); })
         .Case<math::Log1pOp>(
-            [&](auto op) { vectorizeMathOp<math::Log1pOp>(op); })
-        .Case<math::Log2Op>([&](auto op) { vectorizeMathOp<math::Log2Op>(op); })
-        .Case<math::LogOp>([&](auto op) { vectorizeMathOp<math::LogOp>(op); })
+            [&](auto op) { vectorizeMathUnaryOp<math::Log1pOp>(op); })
+        .Case<math::Log2Op>(
+            [&](auto op) { vectorizeMathUnaryOp<math::Log2Op>(op); })
+        .Case<math::LogOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::LogOp>(op); })
+        .Case<math::PowFOp>(
+            [&](auto op) { vectorizeMathBinaryOp<math::PowFOp>(op); })
         .Case<math::RsqrtOp>(
-            [&](auto op) { vectorizeMathOp<math::RsqrtOp>(op); })
-        .Case<math::SinOp>([&](auto op) { vectorizeMathOp<math::SinOp>(op); })
-        .Case<math::SqrtOp>([&](auto op) { vectorizeMathOp<math::SqrtOp>(op); })
-        .Case<math::TanhOp>([&](auto op) { vectorizeMathOp<math::TanhOp>(op); })
+            [&](auto op) { vectorizeMathUnaryOp<math::RsqrtOp>(op); })
+        .Case<math::SinOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::SinOp>(op); })
+        .Case<math::SqrtOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::SqrtOp>(op); })
+        .Case<math::TanhOp>(
+            [&](auto op) { vectorizeMathUnaryOp<math::TanhOp>(op); })
         .Default([&](Operation *op) { vectorizeScalarOp(op); });
   }
 
