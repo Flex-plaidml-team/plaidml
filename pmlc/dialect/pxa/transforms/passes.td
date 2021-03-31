@@ -168,8 +168,8 @@ def Vectorize : FunctionPass<"pxa-vectorize"> {
            "\"simple\"", "Strategy to use for vectorization">,
     Option<"vectorWidth", "width", "unsigned", /*default=*/"8",
            "Vector register size in elements">,
-    Option<"onCpu", "run-on-cpu", "bool", /*default=*/"true",
-        "vectorization for cpu target">
+    Option<"loopMathOp", "loop-math-op", "bool", /*default=*/"false",
+        "create loop for math dialect op">
   ];
 }
 

@@ -738,6 +738,20 @@ Tensor Normalize(Tensor X) {
   return sqrt(X_MS);
 }
 
+TEST_F(CppEdsl, normalize) {
+  auto A = Placeholder(DType::FLOAT32, {10, 10});
+  auto program = makeProgram("normalize", {A}, {Normalize(A)});
+
+  runProgram(program);
+}
+
+TEST_F(CppEdsl, tanh) {
+  auto A = Placeholder(DType::FLOAT32, {10, 10});
+  auto program = makeProgram("normalize", {A}, {tanh(A)});
+
+  runProgram(program);
+}
+
 std::tuple<Tensor, Tensor> LarsMomentum(  //
     Tensor X,                             //
     Tensor Grad,                          //
