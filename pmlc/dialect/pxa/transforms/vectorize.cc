@@ -41,8 +41,8 @@ class VectorizeCandidate {
 private:
   AffineParallelOp loop;
   BlockArgument index;
-  bool onCpu;
   unsigned vectorWidth;
+  bool onCpu;
   DenseSet<Value> vectorizedValues;
   DenseSet<Operation *> vectorizedOps;
   DenseSet<Operation *> zeroStrideReductions;

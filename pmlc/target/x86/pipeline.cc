@@ -10,6 +10,7 @@
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Math/Transforms/Passes.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
@@ -309,6 +310,7 @@ void pipelineBuilder(OpPassManager &pm) {
     pm.addPass(stdx::createBoundsCheckPass());
   }
 
+  pm.addPass(createConvertVectorToLLVMPass());
   pm.addPass(createLowerToLLVMPass());
   pm.addPass(createTraceLinkingPass());
   pm.addNestedPass<LLVM::LLVMFuncOp>(createOpenMPWorkaroundPass());
