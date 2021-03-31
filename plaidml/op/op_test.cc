@@ -560,12 +560,6 @@ TEST_F(OpTest, Sigmoid) {
   runProgram(program);
 }
 
-TEST_F(OpTest, SigmoidForVectorzation) {
-  auto A = Placeholder(DType::FLOAT16, {1, 1152, 1, 1}, "A");
-  auto program = makeProgram("sigmoid", {A}, {op::sigmoid(A)});
-  runProgram(program);
-}
-
 TEST_F(OpTest, Slice) {
   auto A = Placeholder(DType::FLOAT32, {10, 20}, "A");
   auto X = op::slice(A).add_dims({2, 10});

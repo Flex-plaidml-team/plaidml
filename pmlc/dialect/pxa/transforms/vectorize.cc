@@ -133,7 +133,6 @@ private:
       op->emitRemark("Vectorize op: Failed, op has more than 1 operand");
       return;
     }
-
     OpBuilder builder(op);
     auto loc = op.getLoc();
 
@@ -548,7 +547,7 @@ createVectorizePass(StringRef strategy, unsigned vectorWidth, bool loopMathOp) {
 
 // TODO: Maybe move this to a generic utility somewhere
 template <typename OpTy, typename... Args>
-static OpTy replaceOp(Operation *op, Args &&... args) {
+static OpTy replaceOp(Operation *op, Args &&...args) {
   OpBuilder builder(op);
   auto newOp = builder.create<OpTy>(op->getLoc(), std::forward<Args>(args)...);
   op->getResult(0).replaceAllUsesWith(newOp.getResult());
