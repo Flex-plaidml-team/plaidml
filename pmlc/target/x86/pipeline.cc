@@ -285,6 +285,11 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
+  pm.addNestedPass<FuncOp>(pxa::createVectorizePass(/*strategy=*/"recursive"));
+  pm.addNestedPass<FuncOp>(pxa::createAffineNormalizePass());
+  pm.addPass(createCanonicalizerPass());
+  pm.addPass(createCSEPass());
+
   pm.addPass(createLowerPXAToAffinePass());
 
   pm.addPass(createLoopInvariantCodeMotionPass());

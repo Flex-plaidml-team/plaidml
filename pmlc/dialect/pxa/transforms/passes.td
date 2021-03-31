@@ -167,7 +167,9 @@ def Vectorize : FunctionPass<"pxa-vectorize"> {
     Option<"strategy", "strategy", "std::string",
            "\"simple\"", "Strategy to use for vectorization">,
     Option<"vectorWidth", "width", "unsigned", /*default=*/"8",
-           "Vector register size in elements">
+           "Vector register size in elements">,
+    Option<"onCpu", "run-on-cpu", "bool", /*default=*/"true",
+        "vectorization for cpu target">
   ];
 }
 

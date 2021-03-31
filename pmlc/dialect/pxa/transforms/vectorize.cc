@@ -41,6 +41,7 @@ class VectorizeCandidate {
 private:
   AffineParallelOp loop;
   BlockArgument index;
+  bool onCpu;
   unsigned vectorWidth;
   DenseSet<Value> vectorizedValues;
   DenseSet<Operation *> vectorizedOps;
@@ -283,8 +284,8 @@ private:
 
 public:
   VectorizeCandidate(AffineParallelOp loop, BlockArgument index,
-                     unsigned vectorWidth)
-      : loop(loop), index(index), vectorWidth(vectorWidth) {
+                     unsigned vectorWidth, bool onCpu)
+      : loop(loop), index(index), vectorWidth(vectorWidth), onCpu(onCpu) {
     IVLOG(3, "Vectorize candidate: " << getValueName(loop, index));
   }
 
@@ -352,40 +353,47 @@ public:
     if (!vectorizedOps.count(op)) {
       return;
     }
-    TypeSwitch<Operation *>(op)
-        .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
-        .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
-        .Case<math::Atan2Op>(
-            [&](auto op) { vectorizeMathBinaryOp<math::Atan2Op>(op); })
-        .Case<math::AtanOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::AtanOp>(op); })
-        .Case<math::CosOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::CosOp>(op); })
-        .Case<math::Exp2Op>(
-            [&](auto op) { vectorizeMathUnaryOp<math::Exp2Op>(op); })
-        .Case<math::ExpM1Op>(
-            [&](auto op) { vectorizeMathUnaryOp<math::ExpM1Op>(op); })
-        .Case<math::ExpOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::ExpOp>(op); })
-        .Case<math::Log10Op>(
-            [&](auto op) { vectorizeMathUnaryOp<math::Log10Op>(op); })
-        .Case<math::Log1pOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::Log1pOp>(op); })
-        .Case<math::Log2Op>(
-            [&](auto op) { vectorizeMathUnaryOp<math::Log2Op>(op); })
-        .Case<math::LogOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::LogOp>(op); })
-        .Case<math::PowFOp>(
-            [&](auto op) { vectorizeMathBinaryOp<math::PowFOp>(op); })
-        .Case<math::RsqrtOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::RsqrtOp>(op); })
-        .Case<math::SinOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::SinOp>(op); })
-        .Case<math::SqrtOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::SqrtOp>(op); })
-        .Case<math::TanhOp>(
-            [&](auto op) { vectorizeMathUnaryOp<math::TanhOp>(op); })
-        .Default([&](Operation *op) { vectorizeScalarOp(op); });
+    if (onCpu) {
+      TypeSwitch<Operation *>(op)
+          .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
+          .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
+          .Default([&](Operation *op) { vectorizeScalarOp(op); });
+    } else {
+      TypeSwitch<Operation *>(op)
+          .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
+          .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
+          .Case<math::Atan2Op>(
+              [&](auto op) { vectorizeMathBinaryOp<math::Atan2Op>(op); })
+          .Case<math::AtanOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::AtanOp>(op); })
+          .Case<math::CosOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::CosOp>(op); })
+          .Case<math::Exp2Op>(
+              [&](auto op) { vectorizeMathUnaryOp<math::Exp2Op>(op); })
+          .Case<math::ExpM1Op>(
+              [&](auto op) { vectorizeMathUnaryOp<math::ExpM1Op>(op); })
+          .Case<math::ExpOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::ExpOp>(op); })
+          .Case<math::Log10Op>(
+              [&](auto op) { vectorizeMathUnaryOp<math::Log10Op>(op); })
+          .Case<math::Log1pOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::Log1pOp>(op); })
+          .Case<math::Log2Op>(
+              [&](auto op) { vectorizeMathUnaryOp<math::Log2Op>(op); })
+          .Case<math::LogOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::LogOp>(op); })
+          .Case<math::PowFOp>(
+              [&](auto op) { vectorizeMathBinaryOp<math::PowFOp>(op); })
+          .Case<math::RsqrtOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::RsqrtOp>(op); })
+          .Case<math::SinOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::SinOp>(op); })
+          .Case<math::SqrtOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::SqrtOp>(op); })
+          .Case<math::TanhOp>(
+              [&](auto op) { vectorizeMathUnaryOp<math::TanhOp>(op); })
+          .Default([&](Operation *op) { vectorizeScalarOp(op); });
+    }
   }
 
   LogicalResult isLegal() {
@@ -435,8 +443,8 @@ public:
 };
 
 LogicalResult performVectorization(AffineParallelOp op, BlockArgument index,
-                                   unsigned vectorWidth) {
-  VectorizeCandidate candidate(op, index, vectorWidth);
+                                   unsigned vectorWidth, bool onCpu) {
+  VectorizeCandidate candidate(op, index, vectorWidth, onCpu);
   if (failed(candidate.isLegal())) {
     return failure();
   }
@@ -444,7 +452,8 @@ LogicalResult performVectorization(AffineParallelOp op, BlockArgument index,
   return candidate.vectorize();
 }
 
-LogicalResult vectorizeOverOutputs(AffineParallelOp op, unsigned vectorWidth) {
+LogicalResult vectorizeOverOutputs(AffineParallelOp op, unsigned vectorWidth,
+                                   bool onCpu) {
   IVLOG(3, "Attempting to vectorize: " << debugString(*op));
   if (op.getNumResults() != 1) {
     return op.emitRemark("vectorizeOverOutputs: Failed, #result != 1");
@@ -468,22 +477,24 @@ LogicalResult vectorizeOverOutputs(AffineParallelOp op, unsigned vectorWidth) {
   if (options.size() != 1) {
     return op.emitRemark("vectorizeOverOutputs: Failed, options != 1");
   }
-  return performVectorization(op, options[0], vectorWidth);
+  return performVectorization(op, options[0], vectorWidth, onCpu);
 }
 
-LogicalResult vectorizeOverIVs(AffineParallelOp band, unsigned vectorWidth) {
+LogicalResult vectorizeOverIVs(AffineParallelOp band, unsigned vectorWidth,
+                               bool onCpu) {
   for (BlockArgument iv : band.getIVs()) {
-    if (succeeded(performVectorization(band, iv, vectorWidth))) {
+    if (succeeded(performVectorization(band, iv, vectorWidth, onCpu))) {
       break;
     }
   }
   return success();
 }
 
-LogicalResult vectorizeRecursive(AffineParallelOp band, unsigned vectorWidth) {
+LogicalResult vectorizeRecursive(AffineParallelOp band, unsigned vectorWidth,
+                                 bool onCpu) {
   band.walk([&](AffineParallelOp op) {
     for (BlockArgument iv : op.getIVs()) {
-      if (succeeded(performVectorization(op, iv, vectorWidth))) {
+      if (succeeded(performVectorization(op, iv, vectorWidth, onCpu))) {
         break;
       }
     }
@@ -491,8 +502,8 @@ LogicalResult vectorizeRecursive(AffineParallelOp band, unsigned vectorWidth) {
   return success();
 }
 
-using StrategyFn =
-    std::function<LogicalResult(AffineParallelOp op, unsigned vectorWidth)>;
+using StrategyFn = std::function<LogicalResult(
+    AffineParallelOp op, unsigned vectorWidth, bool onCpu)>;
 
 static llvm::StringMap<StrategyFn> strategies{
     {kVectorizeStrategy_Simple, vectorizeOverIVs},
@@ -503,9 +514,10 @@ static llvm::StringMap<StrategyFn> strategies{
 struct VectorizePass : public VectorizeBase<VectorizePass> {
   VectorizePass() = default;
 
-  explicit VectorizePass(StringRef strategy, unsigned vectorWidth) {
+  explicit VectorizePass(StringRef strategy, unsigned vectorWidth, bool onCpu) {
     this->strategy = strategy.str();
     this->vectorWidth = vectorWidth;
+    this->onCpu = onCpu;
   }
 
   void runOnFunction() final {
@@ -516,7 +528,7 @@ struct VectorizePass : public VectorizeBase<VectorizePass> {
       return signalPassFailure();
     }
     for (auto band : func.getOps<AffineParallelOp>()) {
-      if (failed(it->second(band, vectorWidth))) {
+      if (failed(it->second(band, vectorWidth, onCpu))) {
         return signalPassFailure();
       }
     }
@@ -527,9 +539,9 @@ std::unique_ptr<Pass> createVectorizePass() {
   return std::make_unique<VectorizePass>();
 }
 
-std::unique_ptr<mlir::Pass> createVectorizePass(StringRef strategy,
-                                                unsigned vectorWidth) {
-  return std::make_unique<VectorizePass>(strategy, vectorWidth);
+std::unique_ptr<mlir::Pass>
+createVectorizePass(StringRef strategy, unsigned vectorWidth, bool onCpu) {
+  return std::make_unique<VectorizePass>(strategy, vectorWidth, onCpu);
 }
 
 // TODO: Maybe move this to a generic utility somewhere
