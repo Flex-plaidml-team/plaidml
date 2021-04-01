@@ -10,7 +10,6 @@
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
-#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Math/Transforms/Passes.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
@@ -286,11 +285,6 @@ void pipelineBuilder(OpPassManager &pm) {
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createCSEPass());
 
-  pm.addNestedPass<FuncOp>(pxa::createVectorizePass(/*strategy=*/"recursive"));
-  pm.addNestedPass<FuncOp>(pxa::createAffineNormalizePass());
-  pm.addPass(createCanonicalizerPass());
-  pm.addPass(createCSEPass());
-
   pm.addPass(createLowerPXAToAffinePass());
 
   pm.addPass(createLoopInvariantCodeMotionPass());
@@ -310,7 +304,6 @@ void pipelineBuilder(OpPassManager &pm) {
     pm.addPass(stdx::createBoundsCheckPass());
   }
 
-  pm.addPass(createConvertVectorToLLVMPass());
   pm.addPass(createLowerToLLVMPass());
   pm.addPass(createTraceLinkingPass());
   pm.addNestedPass<LLVM::LLVMFuncOp>(createOpenMPWorkaroundPass());

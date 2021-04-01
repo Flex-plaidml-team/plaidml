@@ -60,7 +60,6 @@ plaidml_cc_library(
         "@llvm-project//mlir:MathTransforms",
         "@llvm-project//mlir:OpenMPToLLVM",
         "@llvm-project//mlir:SCFToStandard",
-        "@llvm-project//mlir:VectorToLLVM",
         "@llvm-project//mlir:StandardOpsTransforms",
         "@llvm-project//openmp",
     ],
