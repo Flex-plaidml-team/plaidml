@@ -42,7 +42,7 @@ private:
   AffineParallelOp loop;
   BlockArgument index;
   unsigned vectorWidth;
-  bool loopMathOp;
+  bool vectorizeMathOp;
   DenseSet<Value> vectorizedValues;
   DenseSet<Operation *> vectorizedOps;
   DenseSet<Operation *> zeroStrideReductions;
@@ -283,9 +283,9 @@ private:
 
 public:
   VectorizeCandidate(AffineParallelOp loop, BlockArgument index,
-                     unsigned vectorWidth, bool loopMathOp)
+                     unsigned vectorWidth, bool vectorizeMathOp)
       : loop(loop), index(index), vectorWidth(vectorWidth),
-        loopMathOp(loopMathOp) {
+        vectorizeMathOp(vectorizeMathOp) {
     IVLOG(3, "Vectorize candidate: " << getValueName(loop, index));
   }
 
@@ -353,7 +353,7 @@ public:
     if (!vectorizedOps.count(op)) {
       return;
     }
-    if (!loopMathOp) {
+    if (vectorizeMathOp) {
       TypeSwitch<Operation *>(op)
           .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
           .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
@@ -425,8 +425,8 @@ public:
 };
 
 LogicalResult performVectorization(AffineParallelOp op, BlockArgument index,
-                                   unsigned vectorWidth, bool loopMathOp) {
-  VectorizeCandidate candidate(op, index, vectorWidth, loopMathOp);
+                                   unsigned vectorWidth, bool vectorizeMathOp) {
+  VectorizeCandidate candidate(op, index, vectorWidth, vectorizeMathOp);
   if (failed(candidate.isLegal())) {
     return failure();
   }
@@ -435,7 +435,7 @@ LogicalResult performVectorization(AffineParallelOp op, BlockArgument index,
 }
 
 LogicalResult vectorizeOverOutputs(AffineParallelOp op, unsigned vectorWidth,
-                                   bool loopMathOp) {
+                                   bool vectorizeMathOp) {
   IVLOG(3, "Attempting to vectorize: " << debugString(*op));
   if (op.getNumResults() != 1) {
     return op.emitRemark("vectorizeOverOutputs: Failed, #result != 1");
@@ -459,13 +459,13 @@ LogicalResult vectorizeOverOutputs(AffineParallelOp op, unsigned vectorWidth,
   if (options.size() != 1) {
     return op.emitRemark("vectorizeOverOutputs: Failed, options != 1");
   }
-  return performVectorization(op, options[0], vectorWidth, loopMathOp);
+  return performVectorization(op, options[0], vectorWidth, vectorizeMathOp);
 }
 
 LogicalResult vectorizeOverIVs(AffineParallelOp band, unsigned vectorWidth,
-                               bool loopMathOp) {
+                               bool vectorizeMathOp) {
   for (BlockArgument iv : band.getIVs()) {
-    if (succeeded(performVectorization(band, iv, vectorWidth, loopMathOp))) {
+    if (succeeded(performVectorization(band, iv, vectorWidth, vectorizeMathOp))) {
       break;
     }
   }
@@ -473,10 +473,10 @@ LogicalResult vectorizeOverIVs(AffineParallelOp band, unsigned vectorWidth,
 }
 
 LogicalResult vectorizeRecursive(AffineParallelOp band, unsigned vectorWidth,
-                                 bool loopMathOp) {
+                                 bool vectorizeMathOp) {
   band.walk([&](AffineParallelOp op) {
     for (BlockArgument iv : op.getIVs()) {
-      if (succeeded(performVectorization(op, iv, vectorWidth, loopMathOp))) {
+      if (succeeded(performVectorization(op, iv, vectorWidth, vectorizeMathOp))) {
         break;
       }
     }
@@ -485,7 +485,7 @@ LogicalResult vectorizeRecursive(AffineParallelOp band, unsigned vectorWidth,
 }
 
 using StrategyFn = std::function<LogicalResult(
-    AffineParallelOp op, unsigned vectorWidth, bool loopMathOp)>;
+    AffineParallelOp op, unsigned vectorWidth, bool vectorizeMathOp)>;
 
 static llvm::StringMap<StrategyFn> strategies{
     {kVectorizeStrategy_Simple, vectorizeOverIVs},
@@ -497,10 +497,10 @@ struct VectorizePass : public VectorizeBase<VectorizePass> {
   VectorizePass() = default;
 
   explicit VectorizePass(StringRef strategy, unsigned vectorWidth,
-                         bool loopMathOp) {
+                         bool vectorizeMathOp) {
     this->strategy = strategy.str();
     this->vectorWidth = vectorWidth;
-    this->loopMathOp = loopMathOp;
+    this->vectorizeMathOp = vectorizeMathOp;
   }
 
   void runOnFunction() final {
@@ -511,7 +511,7 @@ struct VectorizePass : public VectorizeBase<VectorizePass> {
       return signalPassFailure();
     }
     for (auto band : func.getOps<AffineParallelOp>()) {
-      if (failed(it->second(band, vectorWidth, loopMathOp))) {
+      if (failed(it->second(band, vectorWidth, vectorizeMathOp))) {
         return signalPassFailure();
       }
     }
@@ -523,8 +523,8 @@ std::unique_ptr<Pass> createVectorizePass() {
 }
 
 std::unique_ptr<mlir::Pass>
-createVectorizePass(StringRef strategy, unsigned vectorWidth, bool loopMathOp) {
-  return std::make_unique<VectorizePass>(strategy, vectorWidth, loopMathOp);
+createVectorizePass(StringRef strategy, unsigned vectorWidth, bool vectorizeMathOp) {
+  return std::make_unique<VectorizePass>(strategy, vectorWidth, vectorizeMathOp);
 }
 
 // TODO: Maybe move this to a generic utility somewhere
