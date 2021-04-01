@@ -362,30 +362,12 @@ public:
       TypeSwitch<Operation *>(op)
           .Case<PxaLoadOp>([&](auto op) { vectorizeLoadOp(op); })
           .Case<PxaReduceOp>([&](auto op) { vectorizeReduceOp(op); })
-          .Case<math::Atan2Op>(
-              [&](auto op) { createLoopForMathBinaryOp<math::Atan2Op>(op); })
-          .Case<math::AtanOp>(
-              [&](auto op) { createLoopForMathUnaryOp<math::AtanOp>(op); })
           .Case<math::CosOp>(
               [&](auto op) { createLoopForMathUnaryOp<math::CosOp>(op); })
-          .Case<math::Exp2Op>(
-              [&](auto op) { createLoopForMathUnaryOp<math::Exp2Op>(op); })
-          .Case<math::ExpM1Op>(
-              [&](auto op) { createLoopForMathUnaryOp<math::ExpM1Op>(op); })
           .Case<math::ExpOp>(
               [&](auto op) { createLoopForMathUnaryOp<math::ExpOp>(op); })
-          .Case<math::Log10Op>(
-              [&](auto op) { createLoopForMathUnaryOp<math::Log10Op>(op); })
-          .Case<math::Log1pOp>(
-              [&](auto op) { createLoopForMathUnaryOp<math::Log1pOp>(op); })
-          .Case<math::Log2Op>(
-              [&](auto op) { createLoopForMathUnaryOp<math::Log2Op>(op); })
           .Case<math::LogOp>(
               [&](auto op) { createLoopForMathUnaryOp<math::LogOp>(op); })
-          .Case<math::PowFOp>(
-              [&](auto op) { createLoopForMathBinaryOp<math::PowFOp>(op); })
-          .Case<math::RsqrtOp>(
-              [&](auto op) { createLoopForMathUnaryOp<math::RsqrtOp>(op); })
           .Case<math::SinOp>(
               [&](auto op) { createLoopForMathUnaryOp<math::SinOp>(op); })
           .Case<math::SqrtOp>(
@@ -547,7 +529,7 @@ createVectorizePass(StringRef strategy, unsigned vectorWidth, bool loopMathOp) {
 
 // TODO: Maybe move this to a generic utility somewhere
 template <typename OpTy, typename... Args>
-static OpTy replaceOp(Operation *op, Args &&...args) {
+static OpTy replaceOp(Operation *op, Args &&... args) {
   OpBuilder builder(op);
   auto newOp = builder.create<OpTy>(op->getLoc(), std::forward<Args>(args)...);
   op->getResult(0).replaceAllUsesWith(newOp.getResult());
