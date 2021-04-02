@@ -44,6 +44,8 @@ using util::ScatterMode;
 
 namespace {
 
+typedef enum { EDGE_INF, EDGE_ONE } gather_boundary_mode;
+
 struct TypeConverter : public mlir::TypeConverter {
   TypeConverter() {
     addConversion([](FunctionType type) { return type; });
@@ -1263,9 +1265,7 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
                                      Value tensor, Value idx,
                                      std::vector<Value> &srcOps, size_t axis,
                                      NearestMode nearestMode) const {
-    auto idxType = rewriter.getIndexType();
     auto i32Type = rewriter.getI32Type();
-    auto bounds = GetIndexBounds(loc, rewriter, tensor, axis, i32Type);
     switch (nearestMode) {
     case NearestMode::round_prefer_floor: {
       auto cmp = isHalfWayFloat(loc, rewriter, idx);
@@ -1291,10 +1291,8 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     default:
       llvm_unreachable("Unsupported NearestMode");
     }
-    idx = checkIntOutOfBounds(loc, rewriter, idx, bounds[0], bounds[1]);
-    idx = rewriter.create<mlir::IndexCastOp>(loc, idx, idxType).getResult();
-    srcOps.at(axis) = idx;
-    return rewriter.create<mlir::LoadOp>(loc, tensor, srcOps);
+    return createLoadOpWithBoundaryCheck(loc, rewriter, idx, tensor, srcOps,
+                                         axis, gather_boundary_mode::EDGE_ONE);
   }
 
   Value buildLinearInterpolationOps(Location loc,
@@ -1302,10 +1300,8 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
                                     Value tensor, Value idx,
                                     std::vector<Value> &srcOps,
                                     size_t axis) const {
-    auto idxType = rewriter.getIndexType();
     auto i32Type = rewriter.getI32Type();
     auto elementType = tensor.getType().cast<MemRefType>().getElementType();
-    auto bounds = GetIndexBounds(loc, rewriter, tensor, axis, i32Type);
     auto cst1F =
         rewriter
             .create<mlir::ConstantOp>(loc, elementType,
@@ -1315,16 +1311,14 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     // Calculate interpolation nodes: floor and ceil
     auto floor = floorFPToSI(loc, rewriter, idx, i32Type);
     auto ceil = ceilFPToSI(loc, rewriter, idx, i32Type);
-    floor = checkIntOutOfBounds(loc, rewriter, floor, bounds[0], bounds[1]);
-    ceil = checkIntOutOfBounds(loc, rewriter, ceil, bounds[0], bounds[1]);
-    floor = rewriter.create<mlir::IndexCastOp>(loc, floor, idxType).getResult();
-    ceil = rewriter.create<mlir::IndexCastOp>(loc, ceil, idxType).getResult();
 
     // Load sample data g0 and g1 at interpolation nodes
-    srcOps.at(axis) = ceil;
-    auto g0 = rewriter.create<mlir::LoadOp>(loc, tensor, srcOps).getResult();
-    srcOps.at(axis) = floor;
-    auto g1 = rewriter.create<mlir::LoadOp>(loc, tensor, srcOps).getResult();
+    auto g0 =
+        createLoadOpWithBoundaryCheck(loc, rewriter, ceil, tensor, srcOps, axis,
+                                      gather_boundary_mode::EDGE_INF);
+    auto g1 =
+        createLoadOpWithBoundaryCheck(loc, rewriter, floor, tensor, srcOps,
+                                      axis, gather_boundary_mode::EDGE_INF);
 
     // Calculate coefficients of g0 and g1
     auto floorF =
@@ -1346,10 +1340,8 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     // Follow the algorithm used in ngraph cubic interpolation (also see, e.g.
     // [article](https://ieeexplore.ieee.org/document/1163711/).
 
-    auto idxType = rewriter.getIndexType();
     auto i32Type = rewriter.getI32Type();
     auto elementType = tensor.getType().cast<MemRefType>().getElementType();
-    auto bounds = GetIndexBounds(loc, rewriter, tensor, axis, i32Type);
 
     // Create constant a (cubeCoeff)
     auto a = rewriter
@@ -1390,11 +1382,9 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     // Load sample data g at interpolation nodes
     SmallVector<Value, 4> g;
     for (size_t i = 0; i < x.size(); i++) {
-      x[i] = checkIntOutOfBounds(loc, rewriter, x[i], bounds[0], bounds[1]);
-      x[i] = rewriter.create<mlir::IndexCastOp>(loc, x[i], idxType).getResult();
-      srcOps.at(axis) = x[i];
-      auto loadOp = rewriter.create<mlir::LoadOp>(loc, tensor, srcOps);
-      g.push_back(loadOp.getResult());
+      g.push_back(
+          createLoadOpWithBoundaryCheck(loc, rewriter, x[i], tensor, srcOps,
+                                        axis, gather_boundary_mode::EDGE_INF));
     }
 
     // Calculate intermediate terms
@@ -1438,36 +1428,71 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     return rewriter.create<mlir::AddFOp>(loc, r, p[3]).getResult();
   }
 
-  SmallVector<Value, 2> GetIndexBounds(Location loc,
-                                       ConversionPatternRewriter &rewriter,
-                                       Value tensor, size_t axis,
-                                       IntegerType integerType) const {
-    // Return lower and upper bounds of a tensor at an axis
-    SmallVector<Value, 2> bounds;
+  Value createLoadOpWithBoundaryCheck(Location loc,
+                                      ConversionPatternRewriter &rewriter,
+                                      Value idx, Value tensor,
+                                      std::vector<Value> srcOps, size_t axis,
+                                      gather_boundary_mode mode) const {
+    auto idxType = rewriter.getIndexType();
+    auto integerType = rewriter.getI32Type();
+    if (idx.getType().isa<FloatType>()) {
+      idx = roundFPToSI(loc, rewriter, idx, integerType);
+    }
+
     auto axisLen = tensor.getType().cast<MemRefType>().getShape()[axis];
     auto lower = rewriter.create<mlir::ConstantOp>(
         loc, integerType, rewriter.getIntegerAttr(integerType, 0));
     auto upper = rewriter.create<mlir::ConstantOp>(
         loc, integerType, rewriter.getIntegerAttr(integerType, axisLen - 1));
-    bounds.push_back(lower.getResult());
-    bounds.push_back(upper.getResult());
-    return bounds;
-  }
 
-  Value checkIntOutOfBounds(Location loc, ConversionPatternRewriter &rewriter,
-                            Value value, Value lowerBound,
-                            Value upperBound) const {
-    // Check if a mlir::IntegerType value is out of bounds. If it is, set it to
-    // lower/upper bound.
-    auto cmpLower = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt,
-                                                  value, lowerBound);
-    auto cmpUpper = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt,
-                                                  value, upperBound);
-    value = rewriter.create<mlir::SelectOp>(loc, cmpLower, lowerBound, value)
-                .result();
-    value = rewriter.create<mlir::SelectOp>(loc, cmpUpper, value, upperBound)
-                .result();
-    return value;
+    if (mode == gather_boundary_mode::EDGE_ONE) {
+      auto loadIdx = idx;
+      auto cmpLower = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt,
+                                                    loadIdx, lower);
+      auto cmpUpper = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt,
+                                                    loadIdx, upper);
+      loadIdx =
+          rewriter.create<mlir::SelectOp>(loc, cmpLower, lower, idx).result();
+      loadIdx = rewriter.create<mlir::SelectOp>(loc, cmpUpper, loadIdx, upper)
+                    .result();
+
+      srcOps.at(axis) =
+          rewriter.create<mlir::IndexCastOp>(loc, loadIdx, idxType).getResult();
+      auto result =
+          rewriter.create<mlir::LoadOp>(loc, tensor, srcOps).getResult();
+
+      auto lower2 = rewriter.create<mlir::ConstantOp>(
+          loc, integerType, rewriter.getIntegerAttr(integerType, -1));
+      auto upper2 = rewriter.create<mlir::ConstantOp>(
+          loc, integerType, rewriter.getIntegerAttr(integerType, axisLen));
+      auto cmpLower2 =
+          rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::sle, idx, lower2);
+      auto cmpUpper2 =
+          rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt, idx, upper2);
+
+      auto elementType = tensor.getType().cast<MemRefType>().getElementType();
+      auto zero = rewriter.create<mlir::ConstantOp>(
+          loc, elementType, rewriter.getFloatAttr(elementType, 0));
+      result = rewriter.create<mlir::SelectOp>(loc, cmpLower2, zero, result)
+                   .result();
+      result = rewriter.create<mlir::SelectOp>(loc, cmpUpper2, result, zero)
+                   .result();
+
+      return result;
+    } else if (mode == gather_boundary_mode::EDGE_INF) {
+      auto cmpLower =
+          rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt, idx, lower);
+      auto cmpUpper =
+          rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt, idx, upper);
+      idx = rewriter.create<mlir::SelectOp>(loc, cmpLower, lower, idx).result();
+      idx = rewriter.create<mlir::SelectOp>(loc, cmpUpper, idx, upper).result();
+
+      idx = rewriter.create<mlir::IndexCastOp>(loc, idx, idxType).getResult();
+      srcOps.at(axis) = idx;
+      return rewriter.create<mlir::LoadOp>(loc, tensor, srcOps);
+    } else {
+      llvm_unreachable("Unsupported gather_boundary_mode");
+    }
   }
 
   Value isHalfWayFloat(Location loc, ConversionPatternRewriter &rewriter,
@@ -1948,8 +1973,8 @@ struct PackOpConversion : public OpConversionPattern<stdx::PackOp> {
                   ConversionPatternRewriter &rewriter) const final {
     auto argpackType = stdx::ArgpackType::get(op.getContext());
     // Some 0-dim tensors convert to 0-dim memrefs, and some convert to actual
-    // scalars. To make the type mapping exact, we always convert 0-dim memrefs
-    // to scalars via doing a load before packing.
+    // scalars. To make the type mapping exact, we always convert 0-dim
+    // memrefs to scalars via doing a load before packing.
     SmallVector<Value, 8> scalarizedOperands;
     for (auto val : operands) {
       // Handle cases that require a load.
@@ -2027,11 +2052,12 @@ struct LowerTileToPXAPass : public LowerTileToPXABase<LowerTileToPXAPass> {
       OpBuilder builder(op);
       for (OpOperand &operand : op.getOperation()->getOpOperands()) {
         Value value = operand.get();
-        bool needsIdent =                                  //
-            value.isa<BlockArgument>() ||                  // Block arguemnt
-            matchPattern(value, m_Constant()) ||           // Constant op
-            matchPattern(value, m_Op<stdx::UnpackOp>()) || // Direct from unpack
-            matchPattern(value, m_Op<tile::ReshapeOp>());  // Reshape op
+        bool needsIdent =                        //
+            value.isa<BlockArgument>() ||        // Block arguemnt
+            matchPattern(value, m_Constant()) || // Constant op
+            matchPattern(value,
+                         m_Op<stdx::UnpackOp>()) ||       // Direct from unpack
+            matchPattern(value, m_Op<tile::ReshapeOp>()); // Reshape op
         if (needsIdent) {
           Value copy = builder.create<tile::IdentOp>(op.getLoc(),
                                                      value.getType(), value);

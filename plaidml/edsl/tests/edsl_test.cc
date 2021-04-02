@@ -1524,7 +1524,7 @@ TEST_F(CppEdsl, InterpolatedGatherNearest) {
 
   std::vector<float> in1 = {0.3f, 1.0f, 8.0f, 5.0f, 5.0f, 2.0f};
   std::vector<float> in2 = {-0.25f, 0.5f, 0.75f, 1.5f, 2.0f, 5.0f, 5.1f, 5.5f, 5.6f};
-  std::vector<float> out = {0.3f, 1.0f, 1.0f, 8.0f, 8.0f, 2.0f, 2.0f, 2.0f, 2.0f};
+  std::vector<float> out = {0.3f, 1.0f, 1.0f, 8.0f, 8.0f, 2.0f, 2.0f, 0.0f, 0.0f};
   checkExact(program, {in1, in2}, {out});
 }
 
