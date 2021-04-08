@@ -2542,5 +2542,20 @@ TEST_F(CppEdsl, ArgSort3dAxisNeg2Asc) {
   // clang-format on
 }
 
+TEST_F(CppEdsl, TMP) {
+  auto I = Placeholder(DType::FLOAT32, {20});
+  auto O = argsort(I, /*axis=*/0);
+  O = op::slice(O).add_dim(0, 10);
+  auto program = makeProgram("argsort", {I}, {O});
+  std::vector<float> input = {
+      81.69, 95.74, 27.74, 43.69, 55.79, 56.79, 57.52, 5.9,   39.48, 7.11,   //
+      14.81, 66.23, 20.25, 66.05, 64.5,  71.07, 67.6,  54.42, 87.59, 80.02,  //
+  };
+  std::vector<int32_t> output = {
+      7, 9, 10, 12, 2, 8, 3, 17, 4, 5,  //
+  };
+  checkExact(program, {input}, {output});
+}
+
 }  // namespace
 }  // namespace plaidml::edsl

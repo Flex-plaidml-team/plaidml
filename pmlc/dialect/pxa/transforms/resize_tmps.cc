@@ -2,6 +2,7 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Support/DebugStringHelper.h"
 
@@ -45,6 +46,10 @@ struct ResizeTmpsPass : public ResizeTmpsBase<ResizeTmpsPass> {
     IVLOG(2, "Considering: " << debugString(*op.getOperation()));
 
     for (auto &use : getIndirectUses(op)) {
+      if (auto scfForOp = use.getOwner()->getParentOfType<scf::ForOp>()) {
+        IVLOG(2, "inside of scf::ForOp");
+        return;
+      }
       if (isa<ReturnOp>(use.getOwner())) {
         IVLOG(2, "Found ReturnOp user, cannot resize allocation");
         return;
