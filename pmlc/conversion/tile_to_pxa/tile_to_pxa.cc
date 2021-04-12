@@ -934,10 +934,6 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
       rewriter.setInsertionPointToStart(loop.getBody());
     }
 
-    auto iconN =
-        rewriter.create<ConstantOp>(loc, rewriter.getIndexAttr(shape[axis]))
-            .getResult();
-
     // For loads and stores from the minIdxVar and minValVar, we'll need a
     // single, zero-value index, because that's the only way to create a memref
     SmallVector<Value, 1> zeroIndex;
@@ -945,8 +941,12 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
 
     // Initialize result tensor using index values in ascending order
     {
-      auto initLoop = rewriter.create<scf::ForOp>(loc, icon0, iconN, icon1);
-      auto initIV = initLoop.getInductionVar();
+      // auto initLoop = rewriter.create<scf::ForOp>(loc, icon0, iconN, icon1);
+      // auto initIV = initLoop.getInductionVar();
+      auto initLoop = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{resultType},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, shape[axis]);
+      auto initIV = initLoop.getIVs()[0];
       rewriter.setInsertionPointToStart(initLoop.getBody());
       // The induction var is the index value across the sort axis.
       // Write the value of the index to its position in the sorted output.
@@ -956,7 +956,10 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
       auto indexVal =
           rewriter.create<IndexCastOp>(loc, initIV, i32Type).getResult();
       ops[axis] = initIV;
-      rewriter.create<StoreOp>(loc, indexVal, result, ops);
+      // auto initStored = rewriter.create<StoreOp>(loc, indexVal, result, ops);
+      auto initStored = rewriter.create<pxa::PxaStoreOp>(
+          loc, AtomicRMWKind::assign, indexVal, result, ops);
+      rewriter.create<AffineYieldOp>(loc, ValueRange{initStored});
       rewriter.setInsertionPointAfter(initLoop);
     }
 
@@ -978,10 +981,17 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
 
     // Build inner sorting loop
     if (shape[axis] > 1) {
+      /*
       auto sortUB = rewriter.create<ConstantOp>(
           loc, rewriter.getIndexAttr(shape[axis] - 1));
       auto sortLoop = rewriter.create<scf::ForOp>(loc, icon0, sortUB, icon1);
       auto sortIV = sortLoop.getInductionVar();
+      */
+
+      auto sortLoop = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{resultType},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, shape[axis] - 1);
+      auto sortIV = sortLoop.getIVs()[0];
       rewriter.setInsertionPointToStart(sortLoop.getBody());
 
       // Get the value associated with the current minimum index position.
@@ -1002,9 +1012,24 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
       rewriter.create<StoreOp>(loc, minVal, minValVar, zeroIndex);
 
       // Iterate over the remaining elements, looking for a smaller value.
+      /*
       auto minLB = rewriter.create<AddIOp>(loc, sortIV, icon1);
       auto minLoop = rewriter.create<scf::ForOp>(loc, minLB, iconN, icon1);
       auto minIV = minLoop.getInductionVar();
+      */
+
+      Block *outerBody = sortLoop.getBody();
+      auto lbExprs = rewriter.getAffineDimExpr(0) + 1;
+      auto lbMap = AffineMap::get(1, 0, {lbExprs}, op.getContext());
+      auto outerIdxs = outerBody->getArguments();
+
+      auto ubMap = AffineMap::get(
+          0, 0, {rewriter.getAffineConstantExpr(shape[axis])}, op.getContext());
+      auto minLoop = rewriter.create<AffineParallelOp>(
+          loc, ArrayRef<Type>{resultType},
+          ArrayRef<AtomicRMWKind>{AtomicRMWKind::assign}, lbMap, outerIdxs,
+          ubMap, ArrayRef<Value>{});
+      auto minIV = minLoop.getIVs()[0];
       rewriter.setInsertionPointToStart(minLoop.getBody());
 
       // Get the comparison value for the search iterator position.
@@ -1030,6 +1055,8 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
       rewriter.create<StoreOp>(loc, minIV, minIdxVar, zeroIndex);
       // store compVal -> minValVar
       rewriter.create<StoreOp>(loc, compVal, minValVar, zeroIndex);
+      rewriter.setInsertionPointToEnd(minLoop.getBody());
+      rewriter.create<AffineYieldOp>(loc, ValueRange{result});
       // End the conditional block. We would set the insertion point after
       // the ifReorder block, except that we are about to...
       // End the inner sort loop, which found the smallest value in the
@@ -1056,10 +1083,13 @@ struct ArgSortOpConversion : public OpConversionPattern<tile::ArgSortOp> {
       rewriter.create<StoreOp>(loc, moveNextVal, result, ops);
       rewriter.setInsertionPointAfter(moveLoop);
       ops[axis] = sortIV;
-      rewriter.create<StoreOp>(loc, finalMinIdx, result, ops);
+      // rewriter.create<StoreOp>(loc, finalMinIdx, result, ops);
+      auto stored = rewriter.create<pxa::PxaStoreOp>(loc, AtomicRMWKind::assign,
+                                                     finalMinIdx, result, ops);
 
       // The minimum remaining value is now at the end of the sorted region.
       // Advance to the next minimum in the remaining unsorted region.
+      rewriter.create<AffineYieldOp>(loc, ValueRange{stored});
       rewriter.setInsertionPointAfter(sortLoop);
     }
 
