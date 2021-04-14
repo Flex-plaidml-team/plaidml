@@ -1311,7 +1311,22 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
             .create<mlir::ConstantOp>(loc, elementType,
                                       rewriter.getFloatAttr(elementType, 1.0))
             .getResult();
-
+    auto cst0F =
+        rewriter
+            .create<mlir::ConstantOp>(loc, elementType,
+                                      rewriter.getFloatAttr(elementType, 0.0))
+            .getResult();
+    auto f32Type = rewriter.getF32Type();
+    auto bound =
+        rewriter.create<mlir::SIToFPOp>(loc, bounds[1], f32Type).getResult();
+    auto bound_add_one =
+        rewriter.create<mlir::AddFOp>(loc, bound, cst1F).getResult();
+    auto bound_lower =
+        rewriter.create<mlir::SIToFPOp>(loc, bounds[0], f32Type).getResult();
+    auto cmp_bound_add_one = rewriter.create<mlir::CmpFOp>(
+        loc, CmpFPredicate::OGE, idx, bound_add_one);
+    auto cmp_lower = rewriter.create<mlir::CmpFOp>(loc, CmpFPredicate::OLT, idx,
+                                                   bound_lower);
     // Calculate interpolation nodes: floor and ceil
     auto floor = floorFPToSI(loc, rewriter, idx, i32Type);
     auto ceil = ceilFPToSI(loc, rewriter, idx, i32Type);
@@ -1335,7 +1350,14 @@ struct GatherOpConversion : public OpConversionPattern<tile::GatherOp> {
     // Return interpolation result (result = c0*g0 + c1*g1)
     auto p0 = rewriter.create<mlir::MulFOp>(loc, c0, g0).getResult();
     auto p1 = rewriter.create<mlir::MulFOp>(loc, c1, g1).getResult();
-    return rewriter.create<mlir::AddFOp>(loc, p0, p1).getResult();
+    auto result_linear = rewriter.create<mlir::AddFOp>(loc, p0, p1).getResult();
+    auto result = rewriter
+                      .create<mlir::SelectOp>(loc, cmp_bound_add_one, cst0F,
+                                              result_linear)
+                      .result();
+    result =
+        rewriter.create<mlir::SelectOp>(loc, cmp_lower, cst0F, result).result();
+    return result;
   }
 
   Value buildCubicInterpolationOps(Location loc,
