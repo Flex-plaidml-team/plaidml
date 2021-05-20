@@ -3,6 +3,7 @@
 #include "plaidml/op/lib/ops.h"
 
 #include <algorithm>
+#include <functional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -2046,8 +2047,8 @@ Tensor compute_iou(std::vector<Tensor> Boxes_coordinates, TensorDim num_batches,
 Value nms(const Value& value) {
   IVLOG(1, "nms");
   auto args = value.as_tuple();
-  if (args.size() != 18) {
-    throw std::runtime_error("nms expects 18 arguments");
+  if (args.size() != 19) {
+    throw std::runtime_error("nms expects 19 arguments");
   }
   auto Boxes = args[0].as_tensor();
   auto Scores = args[1].as_tensor();
@@ -2076,6 +2077,7 @@ Value nms(const Value& value) {
   if (ssd_with_arm_loc) {
     ssd_arm_location = args[17].as_tensor();
   }
+  auto hard_suppression = args[18].as_bool();
 
   std::vector<int64_t> scores_shape = Scores.compute_shape().sizes();
   int64_t boxes_count = scores_shape[2];
@@ -2140,6 +2142,14 @@ Value nms(const Value& value) {
   std::vector<TensorDim> Scatter_dims = {num_batches, num_classes, one};
   std::vector<TensorIndex> Scatter_idxs(3);
   Tensor Zero_scatter = edsl::Contraction(Scatter_dims, Scatter_idxs).assign(Zero(0));
+
+  std::function<edsl::Tensor(Tensor, Tensor)> IOU_compare;
+  if (hard_suppression) {
+    IOU_compare = [](Tensor lhs, Tensor rhs) { return lhs >= rhs; };
+  } else {
+    IOU_compare = [](Tensor lhs, Tensor rhs) { return lhs > rhs; };
+  }
+
   // Select box
   for (int64_t k = 0; k < num_boxes_per_class; k++) {
     // Select the box with largest score
@@ -2164,7 +2174,7 @@ Value nms(const Value& value) {
 
     Tensor IOU_candidate = edsl::gather(IOU, Candidate_index).mode(edsl::GatherMode::ND).batchDims(1);
     // use >= to include suppose_hard_suppresion case
-    New_scores = edsl::select(IOU_candidate >= IOU_threshold_i, Zero, New_scores);
+    New_scores = edsl::select(IOU_compare(IOU_candidate, IOU_threshold_i), Zero, New_scores);
 
     // Add selected box to boxes
     Tensor Box_index = edsl::select(SCORE > 0.0f, edsl::cast(Candidate_index, box_output_type), Neg1_o);
