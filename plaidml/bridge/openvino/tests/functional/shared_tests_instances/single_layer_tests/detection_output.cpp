@@ -22,7 +22,7 @@ const std::vector<bool> clipAfterNms = {true, false};
 const std::vector<bool> clipBeforeNms = {true, false};
 const std::vector<bool> decreaseLabelId = {false};
 const float objectnessScore = 0.4f;
-const std::vector<size_t> numberBatch = {1};
+const std::vector<size_t> numberBatch = {1, 2};
 
 const auto commonAttributes = ::testing::Combine(  //
     ::testing::Values(numClasses),                 //

@@ -545,7 +545,8 @@ class nms {
         clip_after_nms_(false),
         ssd_input_height_(0.0f),
         ssd_input_width_(0.0f),
-        ssd_with_arm_loc_(false) {}
+        ssd_with_arm_loc_(false),
+        ssd_keep_top_k_(-1) {}
 
   nms& soft_nms_sigma(float soft_nms_sigma) {
     soft_nms_sigma_ = soft_nms_sigma;
@@ -612,6 +613,11 @@ class nms {
     return *this;
   }
 
+  nms& ssd_keep_top_k(int ssd_keep_top_k) {
+    ssd_keep_top_k_ = ssd_keep_top_k;
+    return *this;
+  }
+
   std::vector<edsl::Tensor> build() {
     auto args = edsl::make_tuple(              //
         Boxes_,                                //
@@ -631,7 +637,8 @@ class nms {
         ssd_variances_,                        //
         ssd_location_,                         //
         ssd_with_arm_loc_,                     //
-        ssd_arm_location_);
+        ssd_arm_location_,                     //
+        ssd_keep_top_k_);
     auto R = details::op("nms", args).as_tuple();
     auto B = R[0].as_tensor();
     auto S = R[1].as_tensor();
@@ -658,6 +665,7 @@ class nms {
   int ssd_input_height_;
   int ssd_input_width_;
   bool ssd_with_arm_loc_;
+  int ssd_keep_top_k_;
 };
 
 class topk {

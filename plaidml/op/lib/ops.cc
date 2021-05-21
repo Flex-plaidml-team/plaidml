@@ -2046,8 +2046,8 @@ Tensor compute_iou(std::vector<Tensor> Boxes_coordinates, TensorDim num_batches,
 Value nms(const Value& value) {
   IVLOG(1, "nms");
   auto args = value.as_tuple();
-  if (args.size() != 18) {
-    throw std::runtime_error("nms expects 18 arguments");
+  if (args.size() != 19) {
+    throw std::runtime_error("nms expects 19 arguments");
   }
   auto Boxes = args[0].as_tensor();
   auto Scores = args[1].as_tensor();
@@ -2076,6 +2076,7 @@ Value nms(const Value& value) {
   if (ssd_with_arm_loc) {
     ssd_arm_location = args[17].as_tensor();
   }
+  int64_t ssd_keep_top_k = args[18].as_int();
 
   std::vector<int64_t> scores_shape = Scores.compute_shape().sizes();
   int64_t boxes_count = scores_shape[2];
@@ -2196,7 +2197,46 @@ Value nms(const Value& value) {
     Scores_result = edsl::gather(Scores_result, Indexes).axis(0);
     Boxes_result = edsl::gather(Boxes_result, Indexes).axis(0);
   } else {
+    if (boxes_decode_mode == BoxesDecodeMode::SSD) {
+      std::vector<edsl::Tensor> Scores_result_vec;
+      std::vector<edsl::Tensor> Boxes_result_vec;
+      auto sizes = Scores.compute_shape().sizes();
+      int64_t num_batches = sizes[0];
+      int64_t results_num = num_batches * sizes[1] * num_boxes_per_class;
+      int64_t boxes_per_batch = results_num / num_batches;
+      for (int i = 0; i < num_batches; i++) {
+        TensorDim dst(results_num * 3 / num_batches);
+        auto Index = edsl::index({dst}, 0);
+        auto Max = edsl::cast(Tensor{dst}, DType::INT32);
+        Tensor Scores_result_per_batch =
+            op::slice(Scores_result).add_dim(i * boxes_per_batch, (i + 1) * boxes_per_batch).add_dim(0, 3);
+        Tensor Boxes_result_per_batch =
+            op::slice(Boxes_result).add_dim(i * boxes_per_batch, (i + 1) * boxes_per_batch).add_dim(0, 3);
+        Scores_result_per_batch = edsl::reshape(Scores_result_per_batch, {dst});
+        Boxes_result_per_batch = edsl::reshape(Boxes_result_per_batch, {dst});
+        Tensor Neg1_thres = edsl::cast(Tensor(-1), thres_type);
+        auto Index2 = edsl::select(Scores_result_per_batch != Neg1_thres, Index, Max);
+        auto Index3 = edsl::argsort(edsl::cast(Index2, DType::FLOAT32), 0);
+        Scores_result_per_batch = edsl::gather(Scores_result_per_batch, Index3).axis(0);
+        Boxes_result_per_batch = edsl::gather(Boxes_result_per_batch, Index3).axis(0);
+        Scores_result_per_batch = edsl::reshape(Scores_result_per_batch, {boxes_per_batch, 3});
+        Boxes_result_per_batch = edsl::reshape(Boxes_result_per_batch, {boxes_per_batch, 3});
+        if (ssd_keep_top_k > -1 && ssd_keep_top_k < boxes_per_batch) {
+          Tensor Scores_slice = op::slice(Scores_result_per_batch).add_dim(0, boxes_per_batch).add_dim(2, 3);
+          auto Sorted_idxs = op::squeeze(edsl::argsort(Scores_slice, 0, edsl::SortDirection::DESC), {-1});
+          Tensor Idxs_topk = edsl::gather(Sorted_idxs, edsl::index({TensorDim(ssd_keep_top_k)}, 0));
+          auto Idxs_topk_sorted = op::sort(Idxs_topk, 0);
+          Scores_result_per_batch = edsl::gather(Scores_result_per_batch, Idxs_topk_sorted).axis(0);
+          Boxes_result_per_batch = edsl::gather(Boxes_result_per_batch, Idxs_topk_sorted).axis(0);
+        }
+        Scores_result_vec.push_back(Scores_result_per_batch);
+        Boxes_result_vec.push_back(Boxes_result_per_batch);
+      }
+      Scores_result = op::concatenate(Scores_result_vec, 0);
+      Boxes_result = op::concatenate(Boxes_result_vec, 0);
+    }
     // Put all -1 to the end, we now just have -1 at end of each class
+    num_results = TensorDim(Scores_result.compute_shape().sizes()[0]);
     TensorDim dst = num_results * 3;
     auto Index = edsl::index({dst}, 0);
     auto Max = edsl::cast(Tensor{dst}, DType::INT32);

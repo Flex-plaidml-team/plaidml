@@ -142,30 +142,11 @@ void registerDetectionOutput() {
                                            .ssd_location(location)
                                            .ssd_with_arm_loc(with_add_pred)
                                            .ssd_arm_location(arm_loc)
+                                           .ssd_keep_top_k(keep_top_k[0])
                                            .build();
-    edsl::Tensor selected_indices = result[0];
-    auto selected_indices_shape = selected_indices.compute_shape().sizes();
     edsl::Tensor selected_scores = result[1];
-    edsl::Tensor valid_outputs = result[2];
 
-    edsl::Tensor topk_results;
-    if (keep_top_k[0] > -1 && selected_indices_shape[0] > keep_top_k[0]) {
-      edsl::Tensor scores_slice = op::slice(selected_scores).add_dim(0, selected_indices_shape[0]).add_dim(2, 3);
-      auto sorted_idxs = op::squeeze(edsl::argsort(scores_slice, 0, edsl::SortDirection::DESC), {-1});
-      edsl::Tensor idxs_topk = edsl::gather(sorted_idxs, edsl::index({edsl::TensorDim(keep_top_k[0])}, 0));
-      auto idxs_topk_sorted = op::sort(idxs_topk, 0, edsl::SortDirection::ASC);
-      topk_results = edsl::gather(selected_scores, idxs_topk_sorted).axis(0);
-    } else {
-      // Pad -1 at the end the valid data.
-      auto neg_one = cast(edsl::Tensor{-1}, selected_indices.dtype());
-      // The output is a 7-element tuple.
-      int output_tuple_size = 7;
-      std::vector<int64_t> pad_shape = {1, output_tuple_size};
-      auto pad_slice = op::broadcast(neg_one, pad_shape, {});
-      topk_results = op::concatenate({selected_scores, pad_slice}, 0);
-    }
-
-    return edsl::make_tuple(topk_results);
+    return edsl::make_tuple(selected_scores);
   });
 }
 
