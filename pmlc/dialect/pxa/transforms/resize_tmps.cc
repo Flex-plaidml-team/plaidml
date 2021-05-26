@@ -46,6 +46,7 @@ struct ResizeTmpsPass : public ResizeTmpsBase<ResizeTmpsPass> {
     IVLOG(2, "Considering: " << debugString(*op.getOperation()));
 
     for (auto &use : getIndirectUses(op)) {
+      IVLOG(2, "Found getIndirectUses: " << debugString(*use.getOwner()));
       if (isa<ReturnOp>(use.getOwner())) {
         IVLOG(2, "Found ReturnOp user, cannot resize allocation");
         return;
@@ -63,6 +64,7 @@ struct ResizeTmpsPass : public ResizeTmpsBase<ResizeTmpsPass> {
     SmallVector<StrideInfo, 4> outer;
     SmallVector<StrideRange, 4> inner;
     auto vectorSize = 0;
+
     for (auto &use : getIndirectAccessUses(op)) {
       IVLOG(2, "Found use: " << debugString(*use.getOwner()));
       Optional<SmallVector<StrideInfo, 4>> maybeStrides;
@@ -214,11 +216,13 @@ struct ResizeTmpsPass : public ResizeTmpsBase<ResizeTmpsPass> {
     SmallVector<Operation *, 4> ops;
     for (auto &use : getIndirectAccessUses(op.getResult())) {
       ops.push_back(use.getOwner());
+      IVLOG(2, "Pushing back : " << debugString(*use.getOwner()));
     }
     // Now do the actual changes.  Note, we don't bother erasing the original
     // instructions, but they get cleaned up via canonicalization
     for (Operation *op : ops) {
       if (auto rop = dyn_cast<PxaReduceOpInterface>(op)) {
+        std::cout << "Entering PxaReduceOpInterface" << std::endl;
         // TODO: This probably should move into some sort of utility transform,
         // but I need another example or two to generalize from
         auto vm = computeInnerValueMap(rop.getAffineMap(), rop.getMapOperands(),
@@ -238,10 +242,12 @@ struct ResizeTmpsPass : public ResizeTmpsBase<ResizeTmpsPass> {
         }
       }
       if (auto lop = dyn_cast<PxaReadOpInterface>(op)) {
+        std::cout << "Entering PxaReadOpInterface" << std::endl;
         auto vm = computeInnerValueMap(lop.getAffineMap(), lop.getMapOperands(),
                                        opBlock);
         OpBuilder replace(lop.getOperation());
         if (auto lopOp = dyn_cast<PxaLoadOp>(lop.getOperation())) {
+          std::cout << "Entering PxaLoadOp" << std::endl;
           auto nlop =
               replace.create<PxaLoadOp>(lopOp.getLoc(), lopOp.getMemRef(),
                                         vm.getAffineMap(), vm.getOperands());
