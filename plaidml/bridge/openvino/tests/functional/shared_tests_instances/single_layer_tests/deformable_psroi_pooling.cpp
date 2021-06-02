@@ -21,25 +21,44 @@ const std::vector<InferenceEngine::Precision> netPrecisions = {
     InferenceEngine::Precision::FP32,
 };
 
-/* =============== 2 inputs with offsets =============== */
+/* =============== 2 inputs without offsets =============== */
+const auto deformablePSROIParams = ::testing::Combine(                                      //
+    ::testing::ValuesIn(std::vector<std::vector<size_t>>{{3, 8, 16, 16}, {1, 8, 67, 32}}),  // data input shape
+    ::testing::Values(std::vector<size_t>{10, 5}),                                          // rois input shape
+    // Empty offsets shape means test without optional third input
+    ::testing::ValuesIn(std::vector<std::vector<size_t>>{{}, {10, 2, 2, 2}}),                // offsets input shape
+    ::testing::Values(2),                                                                    // output_dim
+    ::testing::Values(2),                                                                    // group_size
+    ::testing::ValuesIn(std::vector<float>{1.0, 0.5, 0.0625}),                               // spatial scale
+    ::testing::ValuesIn(std::vector<std::vector<int64_t>>{{1, 1}, {2, 2}, {3, 3}, {2, 3}}),  // spatial_bins_x_y
+    ::testing::ValuesIn(std::vector<float>{0.0, 0.01, 0.5}),                                 // trans_std
+    ::testing::Values(2));
 
-/* =============== 3 inputs without offsets =============== */
-const auto smoke3Attributes = ::testing::Combine(            //
-    ::testing::Values(std::vector<size_t>{1, 392, 38, 63}),  //
-    ::testing::Values(std::vector<size_t>{300, 5}),          //
-    ::testing::Values(std::vector<size_t>{300, 2, 7, 7}),    //
-    ::testing::Values(8),                                    //
-    ::testing::Values(7),                                    //
-    ::testing::Values(0.0625),                               //
-    ::testing::Values(std::vector<int64_t>{4, 4});           //
-    ::testing::Values(0.1),                                  //
-    ::testing::Values(7));
-const auto smoke3Params = ::testing::Combine(            //
-    smoke3Attributes,                                    //
-    ::testing::Value(InferenceEngine::Precision::FP32),  //
-    ::testing::Value(CommonTestUtils::DEVICE_PLAIDML));
+const auto deformablePSROICases_test_params = ::testing::Combine(  //
+    deformablePSROIParams,                                         //
+    ::testing::Values(InferenceEngine::Precision::FP32),           // Net precision
+    ::testing::Values(CommonTestUtils::DEVICE_PLAIDML));           // Device name
 
-INSTANTIATE_TEST_CASE_P(smokeWithOffsets, DeformablePSROIPoolingLayerTest, smokeParams,
+INSTANTIATE_TEST_CASE_P(smoke_WithoutOffsets, DeformablePSROIPoolingLayerTest, deformablePSROICases_test_params,
                         DeformablePSROIPoolingLayerTest::getTestCaseName);
 
+/* =============== 3 inputs with offsets =============== */
+const auto deformablePSROIParams_advanced = ::testing::Combine(               //
+    ::testing::ValuesIn(std::vector<std::vector<size_t>>{{2, 441, 63, 38}}),  // data input shape
+    ::testing::Values(std::vector<size_t>{30, 5}),                            // rois input shape
+    ::testing::Values(std::vector<size_t>{30, 2, 3, 3}),                      // offsets input shape
+    ::testing::Values(49),                                                    // output_dim
+    ::testing::Values(3),                                                     // group_size
+    ::testing::ValuesIn(std::vector<float>{0.0625}),                          // spatial scale
+    ::testing::ValuesIn(std::vector<std::vector<int64_t>>{{4, 4}}),           // spatial_bins_x_y
+    ::testing::ValuesIn(std::vector<float>{0.1}),                             // trans_std
+    ::testing::Values(3));                                                    // part_size
+
+const auto deformablePSROICases_test_params_advanced = ::testing::Combine(  //
+    deformablePSROIParams_advanced,                                         //
+    ::testing::Values(InferenceEngine::Precision::FP32),                    // Net precision
+    ::testing::Values(CommonTestUtils::DEVICE_PLAIDML));                    // Device name
+
+INSTANTIATE_TEST_CASE_P(smoke_WithOffsets, DeformablePSROIPoolingLayerTest, deformablePSROICases_test_params_advanced,
+                        DeformablePSROIPoolingLayerTest::getTestCaseName);
 }  // namespace
