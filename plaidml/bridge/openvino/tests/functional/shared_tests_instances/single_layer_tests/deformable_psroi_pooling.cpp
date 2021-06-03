@@ -26,7 +26,7 @@ const auto deformablePSROIParams = ::testing::Combine(                          
     ::testing::ValuesIn(std::vector<std::vector<size_t>>{{3, 8, 16, 16}, {1, 8, 67, 32}}),  // data input shape
     ::testing::Values(std::vector<size_t>{10, 5}),                                          // rois input shape
     // Empty offsets shape means test without optional third input
-    ::testing::ValuesIn(std::vector<std::vector<size_t>>{{}, {10, 2, 2, 2}}),                // offsets input shape
+    ::testing::ValuesIn(std::vector<std::vector<size_t>>{{}}),                               // offsets input shape
     ::testing::Values(2),                                                                    // output_dim
     ::testing::Values(2),                                                                    // group_size
     ::testing::ValuesIn(std::vector<float>{1.0, 0.5, 0.0625}),                               // spatial scale
@@ -46,7 +46,7 @@ INSTANTIATE_TEST_CASE_P(smoke_WithoutOffsets, DeformablePSROIPoolingLayerTest, d
 const auto deformablePSROIParams_advanced = ::testing::Combine(               //
     ::testing::ValuesIn(std::vector<std::vector<size_t>>{{2, 441, 63, 38}}),  // data input shape
     ::testing::Values(std::vector<size_t>{30, 5}),                            // rois input shape
-    ::testing::Values(std::vector<size_t>{30, 2, 3, 3}),                      // offsets input shape
+    ::testing::Values(std::vector<size_t>{30, 2, 3, 3}, {10, 2, 2, 2}),       // offsets input shape
     ::testing::Values(49),                                                    // output_dim
     ::testing::Values(3),                                                     // group_size
     ::testing::ValuesIn(std::vector<float>{0.0625}),                          // spatial scale
