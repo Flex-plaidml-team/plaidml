@@ -17,7 +17,7 @@ namespace PlaidMLPlugin {
 
 void registerDeformablePSROIPooling() {
   registerOp("DeformablePSROIPooling", [](const Context& ctx) {
-    IE_ASSERT(ctx.operands.size() == 10 || ctx.operands.size() == 11);
+    IE_ASSERT(ctx.operands.size() == 3 || ctx.operands.size() == 2);
     auto has_offset = ctx.operands.size() == 11;
     auto* layer = ngraph::as_type<ngraph::opset1::DeformablePSROIPooling>(ctx.layer);
     auto data = ctx.operands.at(0);
@@ -52,7 +52,7 @@ void registerDeformablePSROIPooling() {
     roi_rb = op::tile(roi_rb, {1, output_dim * group_size * group_size});
     roi_rb = edsl::reshape(roi_rb, {num_rois * output_dim * group_size * group_size, 2});
 
-    auto roi_sizes = op::maximum(roi_rb - roi_lt, edsl::Tensor(0.1f));
+    auto roi_sizes = op::maximum(roi_rb - roi_lt, edsl::cast(edsl::Tensor(0.1f), rois.dtype()));
     auto bin_sizes = roi_sizes / group_size;  // (#rois * output_dim * group_size * group_size, 2)
 
     auto bin_group_gap = edsl::index({edsl::TensorDim(group_size), edsl::TensorDim(1)}, 0);
