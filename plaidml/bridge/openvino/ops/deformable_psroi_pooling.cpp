@@ -1,9 +1,9 @@
 // Copyright (C) 2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
-
 #include "plaidml_ops.hpp"
 #include "plaidml_util.hpp"
+#include <iostream>
 
 #include "ngraph/opsets/opset.hpp"
 #include "ngraph/opsets/opset1.hpp"
@@ -22,10 +22,6 @@ void registerDeformablePSROIPooling() {
     auto* layer = ngraph::as_type<ngraph::opset1::DeformablePSROIPooling>(ctx.layer);
     auto data = ctx.operands.at(0);
     auto rois = ctx.operands.at(1);
-    edsl::Tensor offsets;
-    if (has_offset) {
-      offsets = ctx.operands.at(2);
-    }
     auto output_dim = static_cast<int>(layer->get_output_dim());
     auto group_size = static_cast<int>(layer->get_group_size());
     auto spatial_scale = layer->get_spatial_scale();
@@ -35,26 +31,32 @@ void registerDeformablePSROIPooling() {
     auto trans_std = layer->get_trans_std();
     auto part_size = layer->get_part_size();
 
+    auto data_shape = data.compute_shape().sizes();
+    auto num_channels_in = data_shape[1];
+    IE_ASSERT(num_channels_in == output_dim * group_size * group_size);
+
     auto rois_shape = rois.compute_shape().sizes();
     auto num_rois = static_cast<int>(rois_shape[0]);
-    auto dimOne = edsl::TensorDim(1);
+    auto dim_one = edsl::TensorDim(1);
 
     rois = edsl::round(rois);
     auto roi_idx = edsl::index({edsl::TensorDim(2)}, 0) + 1;
     // Left top ROI corner - x1, y1
-    edsl::Tensor roi_lt = edsl::gather(rois, roi_idx).axis(1);
+    edsl::Tensor roi_lt = edsl::cast(edsl::gather(rois, roi_idx).axis(1), DType::FLOAT32);
     roi_lt = roi_lt * spatial_scale - 0.5f;
+    // Right bottom ROI corner - x2, y2
+    edsl::Tensor roi_rb = edsl::cast(edsl::gather(rois, roi_idx + 2).axis(1), DType::FLOAT32);
+    roi_rb = (roi_rb + 1.0f) * spatial_scale - 0.5f;
+
     roi_lt = op::tile(roi_lt, {1, output_dim * group_size * group_size});
     roi_lt = edsl::reshape(roi_lt, {num_rois * output_dim * group_size * group_size, 2});
-    // Right bottom ROI corner - x2, y2
-    edsl::Tensor roi_rb = edsl::gather(rois, roi_idx + 2).axis(1);
-    roi_rb = (roi_rb + 1.0f) * spatial_scale - 0.5f;
     roi_rb = op::tile(roi_rb, {1, output_dim * group_size * group_size});
     roi_rb = edsl::reshape(roi_rb, {num_rois * output_dim * group_size * group_size, 2});
 
-    auto roi_sizes = op::maximum(roi_rb - roi_lt, edsl::cast(edsl::Tensor(0.1f), rois.dtype()));
-    auto bin_sizes = roi_sizes / group_size;  // (#rois * output_dim * group_size * group_size, 2)
+    auto roi_sizes = op::maximum(roi_rb - roi_lt, edsl::cast(edsl::Tensor(0.1f), DType::FLOAT32));
 
+    // (#rois * output_dim * group_size * group_size, 2), 2 for width and height
+    auto bin_sizes = roi_sizes / group_size;
     auto bin_group_gap = edsl::index({edsl::TensorDim(group_size), edsl::TensorDim(1)}, 0);
     auto bin_w_gap = op::tile(bin_group_gap, {group_size});
     auto bin_h_gap = edsl::reshape(op::tile(bin_group_gap, {1, group_size}), {group_size * group_size, 1});
@@ -65,12 +67,13 @@ void registerDeformablePSROIPooling() {
 
     if (has_offset) {
       // Calculate indices for offsets tensor
+      auto offsets = ctx.operands.at(2);
       auto offset_bin_idx = bin_gap * part_size / group_size;  // (#rois * output_dim * group_size * group_size, 2)
 
       auto offset_shape = offsets.compute_shape().sizes();
       auto num_classes = offset_shape[1] / 2;
       auto num_class_channels = output_dim / num_classes;
-      auto output_channels = edsl::index({edsl::TensorDim(output_dim), dimOne}, 0);
+      auto output_channels = edsl::index({edsl::TensorDim(output_dim), dim_one}, 0);
       auto offset_channel_idx = output_channels / num_class_channels;
       offset_channel_idx = op::tile(offset_channel_idx, {num_rois, group_size * group_size});
       offset_channel_idx = edsl::reshape(offset_channel_idx, {num_rois * output_dim * group_size * group_size, 1});
@@ -90,37 +93,41 @@ void registerDeformablePSROIPooling() {
     }
 
     // Process spatial sub bins for each roi bin
-    auto zero_idx = edsl::index({dimOne}, 0);
-    edsl::Tensor bin_width = edsl::gather(bin_sizes, zero_idx).axis(1);
-    edsl::Tensor bin_height = edsl::gather(bin_sizes, zero_idx + 1).axis(1);
+    auto zero_idx = edsl::index({dim_one}, 0);
+    edsl::Tensor bin_width = edsl::gather(bin_sizes, 0).axis(1);
+    edsl::Tensor bin_height = edsl::gather(bin_sizes, 1).axis(1);
     auto sub_bin_width = bin_width / static_cast<float>(spatial_bins_x);
     auto sub_bin_height = bin_height / static_cast<float>(spatial_bins_y);
 
-    auto spatial_bin_x_idx = edsl::index({edsl::TensorDim(spatial_bins_x), dimOne}, 0);
-    spatial_bin_x_idx = op::tile(spatial_bin_x_idx, {spatial_bins_y});
-    auto spatial_bin_y_idx = edsl::index({edsl::TensorDim(spatial_bins_y), dimOne}, 0);
-    spatial_bin_y_idx = op::tile(spatial_bin_y_idx, {1, spatial_bins_x});
-    spatial_bin_y_idx = edsl::reshape(spatial_bin_y_idx, {spatial_bins_x * spatial_bins_y, 1});
-    auto spatial_bins =
-        op::concatenate({spatial_bin_x_idx, spatial_bin_y_idx}, 1);  // (spatial_bins_x * spatial_bins_y, 2)
-    spatial_bins = op::tile(spatial_bins, {num_rois * output_dim * group_size * group_size});
-
     auto total_sub_bins = num_rois * output_dim * group_size * group_size * spatial_bins_x * spatial_bins_y;
+    auto spatial_bin_x_idx = edsl::index({edsl::TensorDim(spatial_bins_x), dim_one}, 0);
+    spatial_bin_x_idx = op::tile(spatial_bin_x_idx, {num_rois * output_dim * group_size * group_size * spatial_bins_y});
+    spatial_bin_x_idx = edsl::reshape(spatial_bin_x_idx, {total_sub_bins, 1});
+    auto spatial_bin_y_idx = edsl::index({edsl::TensorDim(spatial_bins_y), dim_one}, 0);
+    spatial_bin_y_idx = op::tile(spatial_bin_y_idx, {num_rois * output_dim * group_size * group_size, spatial_bins_x});
+    spatial_bin_y_idx = edsl::reshape(spatial_bin_y_idx, {total_sub_bins, 1});
+    auto spatial_bin_idx = op::concatenate({spatial_bin_x_idx, spatial_bin_y_idx}, 1);
+
     bin_lt_indices = op::tile(bin_lt_indices, {1, spatial_bins_x * spatial_bins_y});
     bin_lt_indices = edsl::reshape(bin_lt_indices, {total_sub_bins, 2});
-    auto sub_bin_indices = bin_lt_indices + spatial_bins;
+    auto sub_bin_indices = bin_lt_indices + spatial_bin_idx;
 
-    edsl::Tensor batch_idx = edsl::gather(rois, zero_idx).axis(1);
+    edsl::Tensor batch_idx = edsl::gather(rois, 0).axis(1);
     batch_idx = op::tile(batch_idx, {1, output_dim * group_size * group_size * spatial_bins_x * spatial_bins_y});
     batch_idx = edsl::reshape(batch_idx, {total_sub_bins, 1});
 
-    // Implicit restriction:  num of input data channel > group_size * group_size
-    auto channels_in = edsl::index({edsl::TensorDim(group_size * group_size), dimOne}, 0);
-    channels_in = op::tile(channels_in, {num_rois * output_dim, spatial_bins_x * spatial_bins_y});
+    auto channels_in = edsl::index({edsl::TensorDim(num_channels_in), dim_one}, 0);
+    channels_in = op::tile(channels_in, {num_rois, spatial_bins_x * spatial_bins_y});
     channels_in = edsl::reshape(channels_in, {total_sub_bins, 1});
 
     sub_bin_indices = op::concatenate({batch_idx, channels_in, sub_bin_indices}, 1);  // (num_total_sub_bins, 4)
     edsl::Tensor sub_bins = op::gatherND(data, sub_bin_indices).interpolationMode(edsl::InterpolationMode::LINEAR);
+
+    auto invalid_sub_x_idx = (spatial_bin_x_idx < -0.5f) * (spatial_bin_x_idx > (group_size - 0.5f));
+    auto invalid_sub_y_idx = (spatial_bin_y_idx < -0.5f) * (spatial_bin_y_idx > (group_size - 0.5f));
+    auto invalid_sub_idx = invalid_sub_x_idx * invalid_sub_y_idx;
+    invalid_sub_idx = op::squeeze(invalid_sub_idx, {-1});
+    sub_bins = edsl::select(invalid_sub_idx, edsl::cast(edsl::Tensor(0.0f), sub_bins.dtype()), sub_bins);
     sub_bins =
         edsl::reshape(sub_bins, {num_rois * output_dim * group_size * group_size, spatial_bins_x * spatial_bins_y});
     // Do pooling on each group of sub-bins

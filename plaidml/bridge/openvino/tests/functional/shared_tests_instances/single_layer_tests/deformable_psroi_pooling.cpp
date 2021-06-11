@@ -8,18 +8,6 @@
 using LayerTestsDefinitions::DeformablePSROIPoolingLayerTest;
 
 namespace {
-const std::vector<std::vector<size_t>> dataShape = {{}};
-const std::vector<std::vector<size_t>> roiShape = {{}};
-const std::vector<std::vector<size_t>> offsetShape = {{}};
-const std::vector<int64_t> outputDims = {};
-const std::vector<int64_t> groupSizes = {};
-const std::vector<float> spatialScales = {};
-const std::vector<std::vector<int64_t>> spatialBinsXY = {{}};
-const std::vector<float> transStd = {};
-const std::vector<int64_t> partSize = {};
-const std::vector<InferenceEngine::Precision> netPrecisions = {
-    InferenceEngine::Precision::FP32,
-};
 
 /* =============== 2 inputs without offsets =============== */
 const auto deformablePSROIParams = ::testing::Combine(     //
@@ -32,7 +20,7 @@ const auto deformablePSROIParams = ::testing::Combine(     //
     ::testing::ValuesIn(std::vector<float>{1.0, 0.5, 0.0625}),                               // spatial scale
     ::testing::ValuesIn(std::vector<std::vector<int64_t>>{{1, 1}, {2, 2}, {3, 3}, {2, 3}}),  // spatial_bins_x_y
     ::testing::ValuesIn(std::vector<float>{0.0, 0.01, 0.5}),                                 // trans_std
-    ::testing::Values(2));
+    ::testing::Values(2));                                                                   // part_size
 
 const auto deformablePSROICases_test_params = ::testing::Combine(  //
     deformablePSROIParams,                                         //
@@ -40,6 +28,25 @@ const auto deformablePSROICases_test_params = ::testing::Combine(  //
     ::testing::Values(CommonTestUtils::DEVICE_PLAIDML));           // Device name
 
 INSTANTIATE_TEST_CASE_P(smoke_WithoutOffsets, DeformablePSROIPoolingLayerTest, deformablePSROICases_test_params,
+                        DeformablePSROIPoolingLayerTest::getTestCaseName);
+
+const auto deformablePSROIParams2 = ::testing::Combine(              //
+    ::testing::Values(std::vector<size_t>{1, 4, 8, 8}),              // data input shape
+    ::testing::Values(std::vector<size_t>{2, 5}),                    // rois input shape
+    ::testing::Values(std::vector<size_t>{}),                        // offsets input shape
+    ::testing::Values(4),                                            // output_dim
+    ::testing::Values(1),                                            // group_size
+    ::testing::ValuesIn(std::vector<float>{0.0625}),                 // spatial scale
+    ::testing::ValuesIn(std::vector<std::vector<int64_t>>{{1, 1}}),  // spatial_bins_x_y
+    ::testing::ValuesIn(std::vector<float>{0.1}),                    // trans_std
+    ::testing::Values(2));                                           // part_size
+
+const auto deformablePSROICases_test_params2 = ::testing::Combine(  //
+    deformablePSROIParams2,                                         //
+    ::testing::Values(InferenceEngine::Precision::FP32),            // Net precision
+    ::testing::Values(CommonTestUtils::DEVICE_PLAIDML));            // Device name
+
+INSTANTIATE_TEST_CASE_P(smoke, DeformablePSROIPoolingLayerTest, deformablePSROICases_test_params2,
                         DeformablePSROIPoolingLayerTest::getTestCaseName);
 
 /* =============== 3 inputs with offsets =============== */
