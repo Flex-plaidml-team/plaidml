@@ -3,7 +3,6 @@
 //
 #include "plaidml_ops.hpp"
 #include "plaidml_util.hpp"
-#include <iostream>
 
 #include "ngraph/opsets/opset.hpp"
 #include "ngraph/opsets/opset1.hpp"
@@ -18,7 +17,7 @@ namespace PlaidMLPlugin {
 void registerDeformablePSROIPooling() {
   registerOp("DeformablePSROIPooling", [](const Context& ctx) {
     IE_ASSERT(ctx.operands.size() == 3 || ctx.operands.size() == 2);
-    auto has_offset = ctx.operands.size() == 11;
+    auto has_offset = ctx.operands.size() == 3;
     auto* layer = ngraph::as_type<ngraph::opset1::DeformablePSROIPooling>(ctx.layer);
     auto data = ctx.operands.at(0);
     auto rois = ctx.operands.at(1);
@@ -70,26 +69,33 @@ void registerDeformablePSROIPooling() {
     if (has_offset) {
       // Calculate indices for offsets tensor
       auto offsets = ctx.operands.at(2);
-      auto offset_bin_idx = bin_offsets * part_size / group_size;  // (#rois * output_dim * group_size * group_size, 2)
-
       auto offset_shape = offsets.compute_shape().sizes();
-      auto num_classes = offset_shape[1] / 2;
-      auto num_class_channels = output_dim / num_classes;
-      auto output_channels = edsl::index({edsl::TensorDim(output_dim), dim_one}, 0);
-      auto offset_channel_idx = output_channels / num_class_channels;
-      offset_channel_idx = op::tile(offset_channel_idx, {num_rois, group_size * group_size});
-      offset_channel_idx = edsl::reshape(offset_channel_idx, {num_rois * output_dim * group_size * group_size, 1});
+      // offset tensor shape should be (#rois, 2*#classes, part_size, part_size)
+      IE_ASSERT(offset_shape[2] == part_size);
 
-      auto bin_offset_indices = op::concatenate({offset_channel_idx, offset_bin_idx}, 1);
-      bin_offset_indices = edsl::reshape(bin_offset_indices, {num_rois, output_dim * group_size * group_size, 3});
+      auto offset_bin_idx = bin_offsets * part_size / group_size;  // (#rois * output_dim * group_size * group_size, 2)
+      auto coords_sub_channels = offset_shape[1] / 2;
+      auto class_sub_channels = output_dim / coords_sub_channels;
+      auto output_channels = edsl::index({edsl::TensorDim(output_dim), dim_one}, 0);
+      auto offset_channel_idx = output_channels / class_sub_channels;
+      offset_channel_idx = op::tile(offset_channel_idx, {num_rois, group_size * group_size});
+      offset_channel_idx = edsl::reshape(offset_channel_idx, {total_bins, 1});
+
+      auto offset_roi_idx = edsl::index({edsl::TensorDim(num_rois), dim_one}, 0);
+      offset_roi_idx = op::tile(offset_roi_idx, {1, output_dim * group_size * group_size});
+      offset_roi_idx = edsl::reshape(offset_roi_idx, {total_bins, 1});
+
+      auto bin_offset_indices = op::concatenate({offset_roi_idx, offset_channel_idx, offset_bin_idx}, 1);
 
       // Transform offset tensor, make offset x, y pair to be at last dimension
-      auto offsets_reshaped = edsl::reshape(offsets, {num_rois, num_classes, 2, group_size, group_size});
-      offsets_reshaped = op::transpose(offsets_reshaped, edsl::make_tuple<int64_t>({0, 1, 3, 4, 2}));
+      auto offsets_reshaped = edsl::reshape(offsets, {num_rois, coords_sub_channels, 2, part_size, part_size});
+      offsets_reshaped = op::transpose(offsets_reshaped, edsl::make_tuple<int64_t>({0, 1, 4, 3, 2}));
 
       // Gather offset values and apply them onto left top bin coordinate indices
-      edsl::Tensor bin_offset_values = op::gatherND(offsets, bin_offset_indices);
-      bin_offset_values = edsl::reshape(bin_offset_values, {num_rois * output_dim * group_size * group_size, 2});
+      edsl::Tensor bin_offset_values = op::gatherND(offsets_reshaped, bin_offset_indices);
+
+      roi_sizes = op::tile(roi_sizes, {1, output_dim * group_size * group_size});
+      roi_sizes = edsl::reshape(roi_sizes, {total_bins, 2});
       bin_offset_values = bin_offset_values * trans_std * roi_sizes;
       bin_lt_indices = bin_lt_indices + bin_offset_values;
     }
@@ -142,35 +148,11 @@ void registerDeformablePSROIPooling() {
     channel_indices = edsl::reshape(channel_indices, {total_sub_bins, 1});
 
     // Calculate each sub-bin by bilinear interpolation
-    sub_bin_indices = op::concatenate({batch_idx, channel_indices, sub_bin_indices}, 1);  // (num_total_sub_bins,4)
+    sub_bin_indices = op::concatenate({batch_idx, channel_indices, sub_bin_indices}, 1);  // (num_total_sub_bins, 4)
     edsl::Tensor sub_bins = op::gatherND(data, sub_bin_indices).interpolationMode(edsl::InterpolationMode::LINEAR);
 
-//    // ================= bilinear interpolation =================
-//    auto left_x = edsl::floor(sub_bin_x_idx);
-//    auto right_x = edsl::ceil(sub_bin_x_idx);
-//    auto top_y = edsl::floor(sub_bin_y_idx);
-//    auto bottom_y = edsl::ceil(sub_bin_y_idx);
-//
-//    auto sub_tl_indices = edsl::cast(op::concatenate({batch_idx, channel_indices, top_y, left_x}, 1), DType::INT32);
-//    auto sub_tr_indices = edsl::cast(op::concatenate({batch_idx, channel_indices, top_y, right_x}, 1), DType::INT32);
-//    auto sub_bl_indices = edsl::cast(op::concatenate({batch_idx, channel_indices, bottom_y, left_x}, 1), DType::INT32);
-//    auto sub_br_indices = edsl::cast(op::concatenate({batch_idx, channel_indices, bottom_y, right_x}, 1), DType::INT32);
-//    edsl::Tensor sample_tl = op::gatherND(data, sub_tl_indices);
-//    edsl::Tensor sample_tr = op::gatherND(data, sub_tr_indices);
-//    edsl::Tensor sample_bl = op::gatherND(data, sub_bl_indices);
-//    edsl::Tensor sample_br = op::gatherND(data, sub_br_indices);
-//
-//    auto delta_x = op::squeeze(op::abs(sub_bin_x_idx - left_x), {-1});
-//    auto delta_y = op::squeeze(op::abs(sub_bin_y_idx - top_y), {-1});
-//
-//    auto top_interp = sample_tl + (sample_tr - sample_tl) * delta_x;
-//    auto bottom_interp = sample_bl + (sample_br - sample_bl) * delta_x;
-//    auto sub_bins = top_interp + (bottom_interp - top_interp) * delta_y;
-//    // ================= bilinear interpolation =================
-
     sub_bins = edsl::select(invalid_sub_idx, edsl::cast(edsl::Tensor(0.0f), sub_bins.dtype()), sub_bins);
-    sub_bins =
-        edsl::reshape(sub_bins, {num_rois * output_dim * group_size * group_size, spatial_bins_x * spatial_bins_y});
+    sub_bins = edsl::reshape(sub_bins, {total_bins, spatial_bins_x * spatial_bins_y});
     // Do pooling on each group of sub-bins
     auto bins = op::sum(sub_bins, edsl::make_tuple(1)) / (spatial_bins_x * spatial_bins_y);
 
