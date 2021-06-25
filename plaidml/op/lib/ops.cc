@@ -2532,7 +2532,7 @@ Value pool(const Value& value) {
   //    1. Pool Mode (avg/max)
   //    2. Pool Size
   //    3. Strides
-  //    4. Autopad Mode (explicit, same_lower, same_upper, valid, [maybe full?])
+  //    4. Autoexplicit_padding Mode (explicit, same_lower, same_upper, valid, [maybe full?])
   //    5. Manual Padding
   //    6. Layout (i.e. Channel Order) (minimally NXC v NCX)
   //    7. Include Padding in Avg Computation (bool)
