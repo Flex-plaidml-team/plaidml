@@ -99,6 +99,7 @@ plaidml::DType to_plaidml(const ngraph::element::Type& type) {
     case ngraph::element::Type_t::boolean:
       return plaidml::DType::BOOLEAN;
     case ngraph::element::Type_t::u1:
+      return plaidml::DType::BOOLEAN;
     case ngraph::element::Type_t::bf16:
     case ngraph::element::Type_t::undefined:
     case ngraph::element::Type_t::dynamic:
