@@ -1618,6 +1618,76 @@ inline Tensor layer(const std::string& op, const TensorVec& operands, const Laye
   return layer(op, operands, {}, fn, loc);
 }
 
+using ScanSingleFn = std::function<Tensor(Tensor)>;
+using ScanMultiFn = std::function<TensorVec(TensorVec)>;
+
+class ScanBuilder {
+ public:
+  ScanBuilder(const ScanMultiFn& fn, const TensorVec& init_args, const Tensor& n_steps) {
+    operands.push_back(ident(n_steps));
+    operands.insert(operands.end(), init_args.begin(), init_args.end());
+    results = fn(init_args);
+  }
+
+  TensorVec build(edsl_source_location loc = edsl_source_location::current()) const {
+    if (operands.size() - 1 != results.size()) {
+      throw ffi_exception("Scan expects the same number of iteration args and results ", loc);
+    }
+
+    std::string op = "scan";
+    std::vector<plaidml_expr*> rawOperands;
+    rawOperands.reserve(operands.size());
+    for (Tensor operand : operands) {
+      rawOperands.push_back(operand.as_ptr());
+    }
+    std::vector<plaidml_expr*> rawResults;
+    rawResults.reserve(results.size());
+    for (Tensor result : results) {
+      rawResults.push_back(result.as_ptr());
+    }
+
+    Tensor array = Tensor{ffi::call<plaidml_expr*>(  //
+        loc,                                         //
+        plaidml_expr_scan,                           //
+        op.c_str(),                                  //
+        rawOperands.size(),                          //
+        rawOperands.data(),                          //
+        rawResults.size(),                           //
+        rawResults.data())};
+
+    TensorVec output;
+    for (size_t i = 0; i < results.size(); i++) {
+      output.push_back(array.element(i));
+    }
+    return output;
+  }
+
+ private:
+  TensorVec operands;
+  TensorVec results;
+};
+
+inline TensorVec scan(const ScanMultiFn& fn, const TensorVec& init_args, const Tensor& n_steps,
+                      edsl_source_location loc = edsl_source_location::current()) {
+  return ScanBuilder(fn, init_args, n_steps).build(loc);
+}
+
+inline TensorVec scan(const ScanMultiFn& fn, const TensorVec& init_args, const int64_t& n_steps,
+                      edsl_source_location loc = edsl_source_location::current()) {
+  return scan(fn, init_args, index({TensorDim(1)}, 0) + n_steps);
+}
+
+inline Tensor scan(const ScanSingleFn& fn, const Tensor& init_args, const Tensor& n_steps,
+                   edsl_source_location loc = edsl_source_location::current()) {
+  return ScanBuilder([&](TensorVec args) { return TensorVec{fn(args[0])}; }, TensorVec{init_args}, n_steps)
+      .build(loc)[0];
+}
+
+inline Tensor scan(const ScanSingleFn& fn, const Tensor& init_args, const int64_t& n_steps,
+                   edsl_source_location loc = edsl_source_location::current()) {
+  return scan(fn, init_args, index({TensorDim(1)}, 0) + n_steps);
+}
+
 enum class InterpolationMode : uint64_t {
   NEAREST,
   LINEAR,

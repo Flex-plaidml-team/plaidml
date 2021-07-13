@@ -2119,6 +2119,31 @@ TEST_F(CppEdsl, Lens) {
   checkExact(program, {input}, {expected});
 }
 
+TEST_F(CppEdsl, Scan) {
+  auto A = Placeholder(DType::FLOAT32, {4});
+  auto B = Placeholder(DType::FLOAT32, {4});
+  auto body = [=](TensorVec args) {
+    args[0] = args[1] + 1;
+    args[1] = args[0] + 3;
+    return args;
+  };
+  TensorVec output = scan(body, {A, B}, 3);
+  auto program = makeProgram("scan", {A, B}, output);
+  std::vector<float> input1 = {
+      1, 1, 1, 1  //
+  };
+  std::vector<float> input2 = {
+      0, 0, 0, 0  //
+  };
+  std::vector<float> expected1 = {
+      9, 9, 9, 9  //
+  };
+  std::vector<float> expected2 = {
+      12, 12, 12, 12  //
+  };
+  checkExact(program, {input1, input2}, {expected1, expected2});
+}
+
 TEST_F(CppEdsl, Layer) {
   auto A = Placeholder(DType::FLOAT32, {10, 20});
   Tensor O = layer("relu", {A}, [&]() { return Relu(A); });

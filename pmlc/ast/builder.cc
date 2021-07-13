@@ -2,6 +2,7 @@
 
 #include "pmlc/ast/builder.h"
 
+#include <algorithm>
 #include <limits>
 #include <mutex>
 #include <stack>
@@ -10,7 +11,9 @@
 #include <vector>
 
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Pass/PassManager.h"
@@ -226,6 +229,14 @@ private:
         })
         .Case<ExprNodeElement>([&](ExprNodeElement *expr) { push(expr->expr); })
         .Case<ExprNodeLayer>([&](ExprNodeLayer *expr) {
+          for (const ExprNodePtr &node : llvm::reverse(expr->results)) {
+            push(node);
+          }
+          for (const ExprNodePtr &node : llvm::reverse(expr->operands)) {
+            push(node);
+          }
+        })
+        .Case<ExprNodeScan>([&](ExprNodeScan *expr) {
           for (const ExprNodePtr &node : llvm::reverse(expr->results)) {
             push(node);
           }
@@ -479,6 +490,8 @@ struct ProgramBuilder {
     context->getOrLoadDialect<dialect::layer::LayerDialect>();
     context->getOrLoadDialect<math::MathDialect>();
     context->getOrLoadDialect<StandardOpsDialect>();
+    context->getOrLoadDialect<mlir::scf::SCFDialect>();
+    context->getOrLoadDialect<mlir::tensor::TensorDialect>();
   }
 
   std::shared_ptr<Program> build(const ProgramArguments &args) {
@@ -558,6 +571,8 @@ struct ProgramBuilder {
               })
               .Case<ExprNodeLayer>(
                   [&](ExprNodeLayer *node) { return handleLayer(node); })
+              .Case<ExprNodeScan>(
+                  [&](ExprNodeScan *node) { return handleScan(node); })
               .Case<ExprNodePragma>(
                   [&](ExprNodePragma *node) { return handlePragma(node); });
       if (value) {
@@ -756,6 +771,91 @@ struct ProgramBuilder {
         .create<tile::PragmaOp>(loc, tensor, node->op,
                                 builder.getDictionaryAttr(attrs))
         .result();
+  }
+
+  Value handleScan(ExprNodeScan *node) {
+    auto &operands = node->operands;
+    auto nStep = builder.lookupNode(operands[0]);
+
+    SmallVector<Value> iterGlobal;
+    for (size_t i = 1; i < operands.size(); i++) {
+      iterGlobal.push_back(builder.lookupNode(operands[i]));
+    }
+
+    Type indexType = builder.getIndexType();
+    auto zero = builder.create<mlir::ConstantOp>(
+        loc, indexType, builder.getIntegerAttr(indexType, 0));
+    auto one = builder.create<mlir::ConstantOp>(
+        loc, indexType, builder.getIntegerAttr(indexType, 1));
+    RankedTensorType resultType = RankedTensorType::get({1}, indexType);
+    auto nStepIndex = builder.create<tile::CastOp>(loc, resultType, nStep);
+    auto nStepElt = builder.create<mlir::tensor::ExtractOp>(
+        loc, nStepIndex, std::vector<Value>{zero});
+    auto scfForOp =
+        builder.create<mlir::scf::ForOp>(loc, zero, nStepElt, one, iterGlobal);
+    OpBuilder bodyBuilder(scfForOp.getLoopBody());
+    // Set a mapping of global and local Values for scan iterators
+    BlockAndValueMapping mapper;
+    auto iterLocal = scfForOp.getRegionIterArgs();
+    for (auto tuple : llvm::zip(iterGlobal, iterLocal)) {
+      Value outer, inner;
+      std::tie(outer, inner) = tuple;
+      mapper.map(outer, inner);
+    }
+    // Find all ops that belong to scan body
+    llvm::SetVector<Operation *> bodyOpSet;
+    std::vector<Value> valueStack(iterGlobal.begin(), iterGlobal.end());
+    while (!valueStack.empty()) {
+      auto uses = valueStack.back().getUses();
+      for (auto &use : uses) {
+        auto op = use.getOwner();
+        if (op != scfForOp.getOperation()) {
+          for (auto result : op->getResults()) {
+            valueStack.insert(valueStack.begin(), result);
+          }
+          bodyOpSet.insert(op);
+        }
+      }
+      valueStack.pop_back();
+    }
+    // Sort the operations in scan body as the original order in outside block
+    struct opComparator {
+      inline bool operator()(Operation *op1, Operation *op2) {
+        return op1->isBeforeInBlock(op2);
+      }
+    };
+    auto bodyOpVec = bodyOpSet.takeVector();
+    std::sort(bodyOpVec.begin(), bodyOpVec.end(), opComparator());
+    // Move scan body ops into scf_forOp body region
+    SmallVector<Value> resultVals;
+    for (const ExprNodePtr &result : node->results) {
+      resultVals.push_back(builder.lookupNode(result));
+    }
+    llvm::SetVector<Operation *> toRemove;
+    SmallVector<Value, 4> yieldValues(resultVals.size());
+    for (auto op : bodyOpVec) {
+      Operation *clonedOp = bodyBuilder.clone(*op, mapper);
+      op->replaceAllUsesWith(clonedOp);
+      for (auto value : op->getResults()) {
+        auto it = std::find(resultVals.begin(), resultVals.end(), value);
+        if (it != resultVals.end()) {
+          auto opResultOrder = value.dyn_cast<OpResult>().getResultNumber();
+          auto yieldValueOrder = std::distance(resultVals.begin(), it);
+          yieldValues[yieldValueOrder] = clonedOp->getResult(opResultOrder);
+        }
+      }
+      toRemove.insert(op);
+    }
+    bodyBuilder.create<scf::YieldOp>(loc, yieldValues);
+    for (auto op : toRemove) {
+      op->erase();
+    }
+    SmallVector<Value, 4> tuple;
+    for (OpResult result : scfForOp.getResults()) {
+      tuple.push_back(result);
+    }
+    builder.exprTuples[node] = tuple;
+    return nullptr;
   }
 
   Value makeGatherOp(ExprNodeIntrinsic *node, ArrayRef<Value> operands) {

@@ -228,7 +228,7 @@ void pipelineBuilderStage1(OpPassManager &pm, const Options &options) {
 
   pm.addNestedPass<FuncOp>(pxa::createLocalizePass());
   // pm.addNestedPass<FuncOp>(pxa::createResizeTmpsPass());
-  pm.addPass(pxa::createDeallocPlacementPass());
+  // pm.addPass(pxa::createDeallocPlacementPass());
   pm.addNestedPass<FuncOp>(pxa::createAffineNormalizePass(/*promote=*/true,
                                                           /*denest=*/true));
   pm.addPass(createCanonicalizerPass());

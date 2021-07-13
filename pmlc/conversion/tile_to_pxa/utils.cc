@@ -54,6 +54,10 @@ Value createCastOp(OpBuilder &builder, Location loc, Value from,
       return builder.create<SIToFPOp>(loc, intCastOp, intoType).getResult();
     }
   }
+  if (auto intoIntType = intoType.dyn_cast<IndexType>()) {
+    auto intType = builder.getIndexType();
+    return builder.create<IndexCastOp>(loc, from, intType);
+  }
   if (auto intoIntType = intoType.dyn_cast<IntegerType>()) {
     if (auto fromIntType = fromType.dyn_cast<IntegerType>()) {
       if (fromIntType.getWidth() < intoIntType.getWidth()) {

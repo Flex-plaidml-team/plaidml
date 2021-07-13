@@ -81,6 +81,21 @@ struct ConstantOpConversion : public OpConversionPattern<tile::ConstantOp> {
   }
 };
 
+struct ExtractOpConversion
+    : public OpConversionPattern<mlir::tensor::ExtractOp> {
+  using OpConversionPattern<mlir::tensor::ExtractOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::tensor::ExtractOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op->getLoc();
+    auto loadOp = rewriter.create<mlir::memref::LoadOp>(
+        loc, operands[0], std::vector<Value>{operands[1]});
+    rewriter.replaceOp(op, loadOp.getResult());
+    return success();
+  }
+};
+
 struct Matcher {
   LogicalResult operator()(Operation *op) { return success(match(op)); }
   virtual bool match(Operation *op) const { return false; }
@@ -924,7 +939,6 @@ struct FuncOpConversion : public OpConversionPattern<FuncOp> {
 
     // Finally cause the old func op to be erased
     rewriter.eraseOp(op);
-
     return success();
   }
 };
@@ -1077,6 +1091,9 @@ struct ScfForOpConversion : public OpConversionPattern<scf::ForOp> {
       oldArgs[i].replaceAllUsesWith(newArgs[i]);
     }
     rewriter.replaceOp(op, newOp.results());
+    for (auto result : op.results()) {
+      result.replaceAllUsesWith(newOp.getResult(result.getResultNumber()));
+    }
     return success();
   }
 };
@@ -1090,7 +1107,7 @@ struct LowerTileToPXAPass : public LowerTileToPXABase<LowerTileToPXAPass> {
       for (OpOperand &operand : op->getOpOperands()) {
         Value value = operand.get();
         bool needsIdent =                                  //
-            value.isa<BlockArgument>() ||                  // Block arguemnt
+            value.isa<BlockArgument>() ||                  // Block argument
             matchPattern(value, m_Constant()) ||           // Constant op
             matchPattern(value, m_Op<stdx::UnpackOp>()) || // Direct from unpack
             matchPattern(value, m_Op<tile::ReshapeOp>());  // Reshape op
@@ -1142,6 +1159,7 @@ struct LowerTileToPXAPass : public LowerTileToPXABase<LowerTileToPXAPass> {
         CmpIntInequalityOp<CmpIPredicate::sge, CmpIPredicate::uge>;
     RewritePatternSet patterns(&getContext());
     patterns.insert<
+        ExtractOpConversion,  //
         CastOpConversion,     //
         ConstantOpConversion, //
         FuncOpConversion,     //
@@ -1294,6 +1312,22 @@ struct LowerTileToPXAPass : public LowerTileToPXABase<LowerTileToPXAPass> {
       signalPassFailure();
       return;
     }
+    getOperation().walk([&](ReturnOp op) {
+      OpBuilder rewriter(op);
+      auto operands = op.getOperands();
+      auto &block = op->getParentRegion()->front();
+      auto funcOp = op->getParentOfType<FuncOp>();
+      auto blockArg = funcOp.getType().getNumInputs() - op.getNumOperands();
+      // fprintf(stderr, funcOp.getName().str().c_str());
+      if (funcOp.getName() == "main") {
+        for (Value operand : operands) {
+          // Find very initial allocation of memref
+          auto def = pxa::getIndirectDef(operand);
+          def.replaceAllUsesWith(block.getArgument(blockArg++));
+        }
+      }
+      // rewriter.replaceOpWithNewOp<ReturnOp>(op, operands);
+    });
   }
 };
 } // namespace
