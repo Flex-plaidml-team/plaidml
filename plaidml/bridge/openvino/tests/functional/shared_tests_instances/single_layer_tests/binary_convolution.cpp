@@ -55,41 +55,42 @@ const auto conv2DParams_ExplicitPadding = ::testing::Combine(  //
     ::testing::ValuesIn(numOutChannels),                       //
     ::testing::Values(ngraph::op::PadType::EXPLICIT),          //
     ::testing::Values(0.0)                                     //
-);                                                             //
-const auto conv2DParams_AutoPadValid = ::testing::Combine(     //
-    ::testing::ValuesIn(kernels),                              //
-    ::testing::ValuesIn(strides),                              //
-    ::testing::Values(std::vector<ptrdiff_t>({0, 0})),         //
-    ::testing::Values(std::vector<ptrdiff_t>({0, 0})),         //
-    ::testing::ValuesIn(dilations),                            //
-    ::testing::ValuesIn(numOutChannels),                       //
-    ::testing::Values(ngraph::op::PadType::VALID),             //
-    ::testing::Values(0.0)                                     //
-);                                                             //
+);
 
-// INSTANTIATE_TEST_CASE_P(Convolution2D_ExplicitPadding, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(                                              //
-//                            conv2DParams_ExplicitPadding,                                //
-//                            ::testing::ValuesIn(netPrecisions),                          //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 30, 30})),      //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
-//
-// INSTANTIATE_TEST_CASE_P(Convolution2D_AutoPadValid, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(             //
-//                            conv2DParams_AutoPadValid,  //
-//                            ::testing::ValuesIn(netPrecisions),
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 30, 30})),      //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
+const auto conv2DParams_AutoPadValid = ::testing::Combine(  //
+    ::testing::ValuesIn(kernels),                           //
+    ::testing::ValuesIn(strides),                           //
+    ::testing::Values(std::vector<ptrdiff_t>({0, 0})),      //
+    ::testing::Values(std::vector<ptrdiff_t>({0, 0})),      //
+    ::testing::ValuesIn(dilations),                         //
+    ::testing::ValuesIn(numOutChannels),                    //
+    ::testing::Values(ngraph::op::PadType::VALID),          //
+    ::testing::Values(0.0)                                  //
+);                                                          //
+
+INSTANTIATE_TEST_CASE_P(Convolution2D_ExplicitPadding, BinaryConvolutionLayerTest,
+                        ::testing::Combine(                                              //
+                            conv2DParams_ExplicitPadding,                                //
+                            ::testing::ValuesIn(netPrecisions),                          //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 30, 30})),      //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
+
+INSTANTIATE_TEST_CASE_P(Convolution2D_AutoPadValid, BinaryConvolutionLayerTest,
+                        ::testing::Combine(             //
+                            conv2DParams_AutoPadValid,  //
+                            ::testing::ValuesIn(netPrecisions),
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 30, 30})),      //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
 
 /* ============= 3D Convolution ============= */
 const std::vector<std::vector<size_t>> kernels3d = {
@@ -131,29 +132,29 @@ const auto conv3DParams_AutoPadValid = ::testing::Combine(     //
     ::testing::Values(0.0)                                     //
 );                                                             //
 
-// INSTANTIATE_TEST_CASE_P(Convolution3D_ExplicitPadding, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(                                              //
-//                            conv3DParams_ExplicitPadding,                                //
-//                            ::testing::ValuesIn(netPrecisions),                          //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
-//
-// INSTANTIATE_TEST_CASE_P(Convolution3D_AutoPadValid, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(                                              //
-//                            conv3DParams_AutoPadValid,                                   //
-//                            ::testing::ValuesIn(netPrecisions),                          //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(Convolution3D_ExplicitPadding, BinaryConvolutionLayerTest,
+                        ::testing::Combine(                                              //
+                            conv3DParams_ExplicitPadding,                                //
+                            ::testing::ValuesIn(netPrecisions),                          //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
+
+INSTANTIATE_TEST_CASE_P(Convolution3D_AutoPadValid, BinaryConvolutionLayerTest,
+                        ::testing::Combine(                                              //
+                            conv3DParams_AutoPadValid,                                   //
+                            ::testing::ValuesIn(netPrecisions),                          //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
 
 /* ============= Smoke ============= */
 const std::vector<std::vector<size_t>> kernel_smoke = {
@@ -191,28 +192,28 @@ const auto convSmokeParams_AutoPadValid = ::testing::Combine(  //
     ::testing::Values(0.0)                                     //
 );
 
-// INSTANTIATE_TEST_CASE_P(smoke_ExplicitPadding, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(                                              //
-//                            convSmokeParams_ExplicitPadding,                             //
-//                            ::testing::ValuesIn(netPrecisions),                          //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
-//
-// INSTANTIATE_TEST_CASE_P(smoke_AutoPadValid, BinaryConvolutionLayerTest,
-//                        ::testing::Combine(                                              //
-//                            convSmokeParams_AutoPadValid,                                //
-//                            ::testing::ValuesIn(netPrecisions),                          //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(InferenceEngine::Layout::ANY),             //
-//                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
-//                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
-//                        BinaryConvolutionLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(smoke_ExplicitPadding, BinaryConvolutionLayerTest,
+                        ::testing::Combine(                                              //
+                            convSmokeParams_ExplicitPadding,                             //
+                            ::testing::ValuesIn(netPrecisions),                          //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
+
+INSTANTIATE_TEST_CASE_P(smoke_AutoPadValid, BinaryConvolutionLayerTest,
+                        ::testing::Combine(                                              //
+                            convSmokeParams_AutoPadValid,                                //
+                            ::testing::ValuesIn(netPrecisions),                          //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Precision::UNSPECIFIED),  //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(InferenceEngine::Layout::ANY),             //
+                            ::testing::Values(std::vector<size_t>({1, 3, 10, 10, 10})),  //
+                            ::testing::Values(CommonTestUtils::DEVICE_PLAIDML)),         //
+                        BinaryConvolutionLayerTest::getTestCaseName);
 
 }  // namespace
