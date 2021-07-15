@@ -25,7 +25,7 @@ const std::vector<float> threshold = {
 };
 const std::vector<float> sigmaThreshold = {
     0.0f,
-    // 0.5f,
+    0.5f,
 };
 const std::vector<ngraph::op::v5::NonMaxSuppression::BoxEncodingType> encodType = {
     ngraph::op::v5::NonMaxSuppression::BoxEncodingType::CENTER,
