@@ -17,6 +17,7 @@ const std::vector<std::vector<size_t>> inShape = {
 
 const std::vector<InferenceEngine::Precision> netPrecisions = {
     Precision::FP32,
+    Precision::FP16,
 };
 
 INSTANTIATE_TEST_CASE_P(smoke, ConvertLayerTest,

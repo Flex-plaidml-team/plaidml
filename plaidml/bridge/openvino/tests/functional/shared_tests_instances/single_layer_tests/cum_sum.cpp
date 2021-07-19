@@ -19,6 +19,7 @@ const std::vector<std::vector<size_t>> shapes = {
 
 const std::vector<InferenceEngine::Precision> inputPrecision = {
     InferenceEngine::Precision::FP32,  //
+    InferenceEngine::Precision::FP16,  //
     InferenceEngine::Precision::I32,   //
     InferenceEngine::Precision::I16,   //
     InferenceEngine::Precision::I8,    //
