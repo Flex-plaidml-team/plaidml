@@ -1751,6 +1751,41 @@ TEST_F(CppEdsl, InterpolatedGatherND3) {
   checkClose(program, {in1, in2}, {out});
 }
 
+TEST_F(CppEdsl, InterpolatedGatherND4) {
+  auto A = Placeholder(DType::FLOAT16, {2, 2});
+  auto B = Placeholder(DType::FLOAT16, {3, 1});
+  edsl::Tensor O = op::gatherND(A, B).interpolationMode(InterpolationMode::LINEAR);
+  auto program = makeProgram("gatherND", {A, B}, {O});
+
+  std::vector<float> in1 = {
+      -5.0f, -6.0f,  //
+      1.3f, 4.5f,    //
+  };
+  std::vector<float> in2 = {
+      0.2,  //
+      0.5,  //
+      0.9,  //
+  };
+  std::vector<float> out = {
+      -3.74, -3.9,   //
+      -1.85, -0.75,  //
+      0.67,  3.45,   //
+  };
+  std::vector<half> in1_half(in1.size());
+  for (size_t i = 0; i < in1.size(); i++) {
+    in1_half[i] = in1[i];
+  }
+  std::vector<half> in2_half(in2.size());
+  for (size_t i = 0; i < in2.size(); i++) {
+    in2_half[i] = in2[i];
+  }
+  std::vector<half> out_half(out.size());
+  for (size_t i = 0; i < out.size(); i++) {
+    out_half[i] = out[i];
+  }
+  checkClose(program, {in1_half, in2_half}, {out_half}, /*tolerance=*/1e-2);
+}
+
 TEST_F(CppEdsl, Pow) {
   auto A = Placeholder(DType::FLOAT32, {3, 3});
   auto B = Placeholder(DType::FLOAT32, {3, 3});

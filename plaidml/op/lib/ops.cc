@@ -1734,15 +1734,18 @@ Value gatherND(const Value& value) {
             " Indices dimension should be batch_dims plus two in interpolated gatherND, please reshape indices to "
             "satisfy this requirement.");
       }
-      auto Y_float = edsl::cast(Y, DType::FLOAT32);
+      if (Y.dtype() != DType::FLOAT32 && Y.dtype() != DType::FLOAT16) {
+        throw std::runtime_error(" Interpolated gatherND requires data type to be float.");
+      }
+
       std::vector<edsl::Tensor> dims;
       std::vector<std::vector<edsl::Tensor>> bounds;
       for (int i = 0; i < idx_dims; i++) {
-        edsl::Tensor dim = edsl::gather(Y_float, i).axis(-1);
+        edsl::Tensor dim = edsl::gather(Y, i).axis(-1);
         dims.push_back(dim);
         bounds.push_back({edsl::floor(dim), edsl::floor(dim) + 1.0});
       }
-      edsl::Tensor ZERO = edsl::cast(edsl::index({edsl::TensorDim(1)}, 0), DType::FLOAT32);
+      edsl::Tensor ZERO = edsl::cast(edsl::index({edsl::TensorDim(1)}, 0), Y.dtype());
       edsl::Tensor result = ZERO;
       auto num_vertex = std::pow(2.0, idx_dims);
 
