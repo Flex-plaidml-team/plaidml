@@ -107,8 +107,8 @@ const auto params5Inputs = ::testing::Combine(  //
     ::testing::Values(objectnessScore),         //
     ::testing::Values(CommonTestUtils::DEVICE_PLAIDML));
 
-// INSTANTIATE_TEST_CASE_P(DetectionOutput5In, DetectionOutputLayerTest, params5Inputs,
-//                        DetectionOutputLayerTest::getTestCaseName);
+INSTANTIATE_TEST_CASE_P(DetectionOutput5In, DetectionOutputLayerTest, params5Inputs,
+                        DetectionOutputLayerTest::getTestCaseName);
 
 const std::vector<ParamsWhichSizeDepends> smokeParams5In = {
     ParamsWhichSizeDepends{true, true, true, 1, 1, {1, 60}, {1, 165}, {1, 1, 60}, {1, 30}, {1, 60}},
